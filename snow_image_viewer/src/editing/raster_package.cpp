@@ -1,5 +1,7 @@
 #include "editing/raster_package.h"
 
+#include "core/native_path.h"
+
 #include <QFile>
 #include <QSharedMemory>
 
@@ -68,15 +70,6 @@ bool supportsCompatibilityDocument(const snow::image::DocumentDescriptor& descri
                                   frame.layout.planes.front().semantic ==
                                       snow::image::PlaneSemantic::packed;
                        });
-}
-
-std::filesystem::path nativePath(const QString& path) {
-#if defined(Q_OS_WIN)
-    return std::filesystem::path(path.toStdWString());
-#else
-    const QByteArray encoded = path.toUtf8();
-    return std::filesystem::path(encoded.constData());
-#endif
 }
 
 snow::image::Result<snow::image::Document> mappedDocument(const snow::image::RasterSource& store) {

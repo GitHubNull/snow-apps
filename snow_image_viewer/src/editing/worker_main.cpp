@@ -13,6 +13,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -54,6 +55,21 @@ std::ptrdiff_t readInput(char* data, std::size_t size) {
 #endif
 }
 
+#if !defined(Q_OS_WIN)
+std::uint64_t currentAddressSpaceBytes() {
+    std::FILE* file = std::fopen("/proc/self/statm", "r");
+    if (!file)
+        return 0;
+    unsigned long long pages = 0;
+    const int fields = std::fscanf(file, "%llu", &pages);
+    std::fclose(file);
+    const long pageSize = sysconf(_SC_PAGESIZE);
+    if (fields != 1 || pageSize <= 0)
+        return 0;
+    return static_cast<std::uint64_t>(pages) * static_cast<std::uint64_t>(pageSize);
+}
+#endif
+
 bool applyMemoryLimit(qulonglong bytes, bool initialize = false) {
     if (bytes == 0)
         return false;
@@ -75,11 +91,21 @@ bool applyMemoryLimit(qulonglong bytes, bool initialize = false) {
         assigned = true;
     }
 #else
+    // RLIMIT_AS bounds the whole virtual address space, including the Qt runtime
+    // and thread stacks that exist before the job starts. The job value is a
+    // working-set estimate, so the soft limit adds the current footprint.
+    qulonglong effective = bytes;
+    if (!initialize) {
+        const std::uint64_t baseline = currentAddressSpaceBytes();
+        effective = baseline > std::numeric_limits<qulonglong>::max() - effective
+                        ? std::numeric_limits<qulonglong>::max()
+                        : effective + static_cast<qulonglong>(baseline);
+    }
     rlimit limit{};
     if (getrlimit(RLIMIT_AS, &limit) != 0)
         return false;
     const rlim_t requested =
-        static_cast<rlim_t>(std::min<qulonglong>(bytes, std::numeric_limits<rlim_t>::max()));
+        static_cast<rlim_t>(std::min<qulonglong>(effective, std::numeric_limits<rlim_t>::max()));
     if (initialize)
         limit.rlim_max = requested;
     limit.rlim_cur = std::min(requested, limit.rlim_max);

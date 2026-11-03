@@ -504,6 +504,14 @@
         "SNOW_APPS_BUILD_TESTS": "OFF",
         "SNOW_APPS_BUILD_BENCHMARKS": "OFF"
       }
+    },
+    {
+      "name": "linux-debug-tests",
+      "displayName": "Linux GCC Debug (image viewer tests)",
+      "inherits": "linux-debug",
+      "cacheVariables": {
+        "SNOW_APPS_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -657,6 +665,18 @@
       "configurePreset": "linux-debug",
       "targets": [
         "snow-all"
+      ]
+    },
+    {
+      "name": "build-linux-viewer-tests",
+      "configurePreset": "linux-debug-tests",
+      "targets": [
+        "snow_image_viewer_tests",
+        "snow_image_viewer_editor_lifecycle_tests",
+        "snow_image_viewer_image_notification_lifetime_tests",
+        "snow_image_viewer_pipeline_notification_lifetime_tests",
+        "snow_image_viewer_generated_icon_pack_tests",
+        "snow_image_edit_worker"
       ]
     }
   ],

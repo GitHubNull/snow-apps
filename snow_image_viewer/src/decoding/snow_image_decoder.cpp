@@ -2,6 +2,7 @@
 
 #include "core/image_raster_store.h"
 #include "core/image_tile_store.h"
+#include "core/native_path.h"
 
 #include <snow/image/service.h>
 #include <snow/image/processing.h>
@@ -56,10 +57,6 @@ analyzeDocument(const snow::image::Document& document, std::stop_token stop) {
         }
     }
     return analysis;
-}
-
-std::filesystem::path nativePath(const QString& filePath) {
-    return std::filesystem::path(filePath.toStdU16String());
 }
 
 QColorSpace::Primaries qtPrimaries(snow::image::ColorPrimaries primaries) {

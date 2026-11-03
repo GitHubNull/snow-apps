@@ -798,7 +798,13 @@ void ViewerWindow::buildInterface() {
     openWithAction_ = imageContextMenu_->addItem(QStringLiteral("Open with"), outlined::Appstore());
     openWithAction_->setObjectName(QStringLiteral("openWithAction"));
     revealInExplorerAction_ =
-        imageContextMenu_->addItem(QStringLiteral("Open in File Explorer"), outlined::FolderOpen());
+        imageContextMenu_->addItem(
+#if defined(Q_OS_WIN)
+            QStringLiteral("Open in File Explorer"),
+#else
+            QStringLiteral("Open Containing Folder"),
+#endif
+            outlined::FolderOpen());
     revealInExplorerAction_->setObjectName(QStringLiteral("revealInExplorerAction"));
     imageContextMenu_->addSeparator();
     deleteImageAction_ =

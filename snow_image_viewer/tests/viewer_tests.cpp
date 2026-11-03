@@ -1,6 +1,7 @@
 #include "core/folder_sequence.h"
 #include "core/image_raster_store.h"
 #include "core/image_tile_store.h"
+#include "core/native_path.h"
 #include "decoding/image_loader.h"
 #include "decoding/snow_image_decoder.h"
 #include "editing/edit_pipeline_controller.h"
@@ -14,12 +15,15 @@
 #include <snow/image/service.h>
 
 #include <QBuffer>
+#include <QColor>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QEventLoop>
 #include <QProcess>
+#include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -48,6 +52,8 @@
 #endif
 
 namespace {
+
+using snow::image_viewer::nativePath;
 
 class ChunkedWriteDevice final : public QIODevice {
   public:
@@ -108,10 +114,6 @@ snow::image::Image sampleImage(std::byte red, std::uint32_t width = 2, std::uint
         image.pixels()[offset + 3U] = std::byte{0xFF};
     }
     return std::move(image).freeze();
-}
-
-std::filesystem::path nativePath(const QString& path) {
-    return std::filesystem::path(path.toStdU16String());
 }
 
 snow::image_viewer::GpuRasterResult gpuReadback(QImage pixels) {
@@ -1793,8 +1795,7 @@ void testTileStore() {
     auto descriptor = take(snow::image::describe_document(info), "describe tile store fixture");
     descriptor.frames.front().layout.alpha = snow::image::AlphaMode::premultiplied;
     auto rasterStore =
-        take(snow::image::RasterStore::create(std::filesystem::path(path.toStdU16String()),
-                                              std::move(descriptor)),
+        take(snow::image::RasterStore::create(nativePath(path), std::move(descriptor)),
              "create raster tile store fixture");
     const auto rawBytes = std::as_bytes(std::span(raw));
     take(rasterStore->write_rows(0, 0, 0, 2, 8, rawBytes), "write raster tile store fixture");
@@ -1845,8 +1846,7 @@ void testTileStore() {
     nativeOptions.raster_layout = snow::image::RasterLayoutPolicy::native;
     auto nativeStore =
         take(service.decode_to_store(snow::image::memory_input(jpegBytes, "tile.jpg"),
-                                     std::filesystem::path(nativePathString.toStdU16String()),
-                                     nativeOptions),
+                                     nativePath(nativePathString), nativeOptions),
              "decode native planar JPEG tile store");
     require(nativeStore->descriptor().frames.front().layout.planes.size() == 3 &&
                 nativeStore->descriptor().frames.front().layout.planes.front().width == 8 &&
@@ -1904,8 +1904,7 @@ void testTileStore() {
     require(QFile::remove(webpPathString), "reserve native WebP raster tile store path");
     auto webpStore =
         take(service.decode_to_store(snow::image::memory_input(webpBytes, "tile.webp"),
-                                     std::filesystem::path(webpPathString.toStdU16String()),
-                                     nativeOptions),
+                                     nativePath(webpPathString), nativeOptions),
              "decode native planar WebP tile store");
     require(webpStore->descriptor().frames.front().layout.planes.size() == 4 &&
                 webpStore->descriptor().frames.front().layout.alpha ==
@@ -2985,8 +2984,7 @@ void testWebpNativeRoutingAndArtifactReuse(const QString& directory) {
     sourceOptions.effort = 4;
     snow::image::Service service;
     auto sourceOutput =
-        take(snow::image::file_output(std::filesystem::path(sourcePath.toStdU16String())),
-             "open native WebP viewer source");
+        take(snow::image::file_output(nativePath(sourcePath)), "open native WebP viewer source");
     require(service.encode(document, sourceOutput, sourceOptions).has_value(),
             "encode native WebP viewer source");
     sourceOutput.sink.reset();
@@ -3170,6 +3168,67 @@ void testJpegNativePreviewAndArtifactReuse(const QString& directory) {
             "JPEG export uses black compositing, native exact preview, and artifact reuse");
 }
 
+void testUnicodeNativePaths(const QString& baseDirectory) {
+    const QString directory = baseDirectory + QStringLiteral("/中文 目录");
+    require(QDir().mkpath(directory), "create a Unicode test directory");
+    const QString sourcePath = directory + QStringLiteral("/源 图片.png");
+    QImage sourceImage(16, 8, QImage::Format_RGBA8888);
+    sourceImage.fill(QColor(32, 96, 160, 255));
+    require(sourceImage.save(sourcePath), "write a Unicode-named PNG source");
+    require(std::filesystem::exists(nativePath(sourcePath)),
+            "nativePath resolves an existing Unicode source path");
+
+    const snow::image_viewer::DecodeResult decoded =
+        snow::image_viewer::ImageLoader::decodeSynchronously(sourcePath);
+    require(decoded.succeeded() && decoded.image.sourceSize == QSize(16, 8),
+            "decoder reads a Unicode-named source image");
+
+    snow::image_viewer::EditPipelineOptions options;
+    options.allowSourceRasterReuse = false;
+    snow::image_viewer::EditPipelineController controller(options, nullptr);
+    snow::image_viewer::EditExportSettings settings;
+    settings.sourceSize = QSize(16, 8);
+    settings.width = 8;
+    settings.height = 4;
+    settings.format = snow::image::Format::png;
+    settings.encode.format = settings.format;
+    const QString exportPath = directory + QStringLiteral("/导出 图片.png");
+
+    QEventLoop loop;
+    bool exported = false;
+    QString failure;
+    QObject::connect(&controller, &snow::image_viewer::EditPipelineController::sourceReady, &loop,
+                     [&]() { controller.requestEdit(settings); });
+    QObject::connect(
+        &controller, &snow::image_viewer::EditPipelineController::exactReady, &loop,
+        [&](const snow::image_viewer::ExactEditResult& result) {
+            if (!result.isValid())
+                return;
+            QSaveFile output(exportPath);
+            require(output.open(QIODevice::WriteOnly), "open a Unicode export target");
+            QString error;
+            require(result.artifact->copyTo(output, &error), "copy the Unicode export artifact");
+            require(output.commit(), "commit the Unicode export target");
+            exported = true;
+            loop.quit();
+        });
+    QObject::connect(&controller, &snow::image_viewer::EditPipelineController::failed, &loop,
+                     [&](const QString& message) {
+                         failure = message;
+                         loop.quit();
+                     });
+    QTimer::singleShot(15'000, &loop, &QEventLoop::quit);
+    controller.setSource(sourcePath);
+    loop.exec();
+    if (!failure.isEmpty())
+        std::cerr << "Unicode native path error: " << failure.toStdString() << '\n';
+    require(failure.isEmpty() && exported, "edit pipeline exports a Unicode-named source");
+
+    const QImage result(exportPath);
+    require(!result.isNull() && result.size() == QSize(8, 4),
+            "exported Unicode-named PNG decodes with the requested size");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -3230,6 +3289,12 @@ int main(int argc, char** argv) {
         testEquivalentEditRetainsPublishedArtifact(directory.path(), true);
         testEquivalentQueuedCacheHit(directory.path());
         testExportKeyNormalization();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--unicode-path-only"))) {
+        QTemporaryDir directory;
+        require(directory.isValid(), "create Unicode native path test directory");
+        testUnicodeNativePaths(directory.path());
         return 0;
     }
     if (argc > 1) {

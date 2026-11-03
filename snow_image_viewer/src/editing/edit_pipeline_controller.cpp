@@ -2,6 +2,7 @@
 
 #include "core/image_raster_store.h"
 #include "core/image_tile_store.h"
+#include "core/native_path.h"
 #include "decoding/snow_image_decoder.h"
 #include "editing/raster_asset.h"
 #include "editing/raster_package.h"
@@ -51,10 +52,6 @@ struct PerformanceTiming final {
 void recordTiming(QVector<PerformanceTiming>* timings, const QString& stage, QElapsedTimer* timer) {
     timings->push_back({stage, timer->nsecsElapsed()});
     timer->restart();
-}
-
-std::filesystem::path nativePath(const QString& path) {
-    return std::filesystem::path(path.toStdU16String());
 }
 
 QString statusText(const snow::image::Status& status) {
@@ -461,13 +458,23 @@ EditPipelineController::EditPipelineController(EditPipelineOptions options, QObj
 EditPipelineController::~EditPipelineController() {
     shuttingDown_ = true;
     cancel();
-    if (worker_ && worker_->state() != QProcess::NotRunning) {
-        worker_->write(worker_protocol::encodeFrame(worker_protocol::MessageType::shutdown, {}));
-        worker_->closeWriteChannel();
-        if (!worker_->waitForFinished(100)) {
-            worker_->kill();
-            worker_->waitForFinished(1000);
+    if (worker_) {
+        if (worker_->state() != QProcess::NotRunning) {
+            worker_->write(
+                worker_protocol::encodeFrame(worker_protocol::MessageType::shutdown, {}));
+            worker_->closeWriteChannel();
+            if (!worker_->waitForFinished(100)) {
+                worker_->kill();
+                worker_->waitForFinished(1000);
+            }
         }
+        // Observations may destroy the controller from a worker signal (the
+        // worker can report failure while Qt is still inside QProcess signal
+        // delivery). Detach the process so child teardown cannot delete it
+        // mid-delivery, and let the event loop reclaim it.
+        worker_->setParent(nullptr);
+        worker_->deleteLater();
+        worker_ = nullptr;
     }
     // Deleting the pool would wait for an in-flight decode unconditionally;
     // orphan it past the deadline. The decode task holds only by-value state
@@ -1639,6 +1646,7 @@ void EditPipelineController::startWorker() {
     if (shuttingDown_ || (worker_ && worker_->state() != QProcess::NotRunning))
         return;
     if (worker_) {
+        worker_->setParent(nullptr);
         worker_->deleteLater();
         worker_ = nullptr;
     }
@@ -2225,6 +2233,10 @@ void EditPipelineController::handleWorkerExit(int exitCode) {
     }
     workerTimeout_.stop();
     if (worker_) {
+        // This can run inside QProcess signal delivery. Detach before the
+        // deferred delete so a controller destroyed by a failure observer
+        // cannot free the process while Qt is still using it.
+        worker_->setParent(nullptr);
         worker_->deleteLater();
         worker_ = nullptr;
     }
@@ -2322,6 +2334,7 @@ void EditPipelineController::cancelActiveWorker(bool restart) {
             worker_->kill();
             worker_->waitForFinished(25);
         }
+        worker_->setParent(nullptr);
         worker_->deleteLater();
         worker_ = nullptr;
     }
@@ -2346,6 +2359,7 @@ void EditPipelineController::retireIdleWorker() {
         worker_->kill();
         worker_->waitForFinished(100);
     }
+    worker_->setParent(nullptr);
     worker_->deleteLater();
     worker_ = nullptr;
     workerReady_ = false;

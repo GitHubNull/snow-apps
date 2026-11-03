@@ -1,5 +1,7 @@
 #include "editing/encoded_artifact.h"
 
+#include "core/native_path.h"
+
 #include <QIODevice>
 
 #include <algorithm>
@@ -10,10 +12,6 @@
 
 namespace snow::image_viewer {
 namespace {
-
-std::filesystem::path nativePath(const QString& path) {
-    return std::filesystem::path(path.toStdU16String());
-}
 
 void setError(QString* error, const QString& message) {
     if (error)

@@ -1,5 +1,7 @@
 #include "core/image_raster_store.h"
 
+#include "core/native_path.h"
+
 #include <QFile>
 #include <QTemporaryFile>
 
@@ -8,10 +10,6 @@
 
 namespace snow::image_viewer {
 namespace {
-
-std::filesystem::path nativePath(const QString& path) {
-    return std::filesystem::path(path.toStdU16String());
-}
 
 void setError(QString* error, const snow::image::Status& status) {
     if (error)

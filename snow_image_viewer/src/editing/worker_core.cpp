@@ -1,5 +1,6 @@
 #include "editing/worker_core.h"
 
+#include "core/native_path.h"
 #include "editing/raster_package.h"
 #include "editing/worker_protocol.h"
 
@@ -23,10 +24,6 @@
 
 namespace snow::image_viewer::worker_core {
 namespace {
-
-std::filesystem::path nativePath(const QString& path) {
-    return std::filesystem::path(path.toStdU16String());
-}
 
 QString statusText(const snow::image::Status& status) {
     const QString message = QString::fromStdString(status.message).trimmed();

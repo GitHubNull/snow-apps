@@ -50,6 +50,7 @@ set(SNOW_IMAGE_VIEWER_SOURCES
     src/core/image_types.h
     src/core/image_tile_store.cpp
     src/core/image_tile_store.h
+    src/core/native_path.h
     src/core/view_transform.cpp
     src/core/view_transform.h
     src/decoding/image_decoder.h
