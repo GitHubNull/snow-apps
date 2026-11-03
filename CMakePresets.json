@@ -485,9 +485,10 @@
         "SNOW_APPS_BUILD_DRAW_ENGINE": "ON",
         "SNOW_APPS_BUILD_DRAW_ENGINE_DEMO": "OFF",
         "SNOW_APPS_BUILD_IMAGE_VIEWER": "ON",
-        "SNOW_APPS_BUILD_SNOW_SHOT": "OFF",
+        "SNOW_APPS_BUILD_SNOW_SHOT": "ON",
         "SNOW_APPS_BUILD_SNOW_SHOT_MINI": "OFF",
         "SNOW_APPS_PACKAGE_SNOW_SHOT": "OFF",
+        "SNOW_SHOT_ENABLE_MCP": "OFF",
         "SNOW_APPS_RELEASE_STATIC": "OFF",
         "SNOW_APPS_QT_STATIC": "OFF",
         "SNOW_IMAGE_PROFILE": "full",
@@ -496,7 +497,7 @@
     },
     {
       "name": "linux-debug",
-      "displayName": "Linux GCC Debug (libraries and image viewer)",
+      "displayName": "Linux GCC Debug (desktop apps)",
       "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -677,6 +678,13 @@
         "snow_image_viewer_pipeline_notification_lifetime_tests",
         "snow_image_viewer_generated_icon_pack_tests",
         "snow_image_edit_worker"
+      ]
+    },
+    {
+      "name": "build-linux-snow-shot-tests",
+      "configurePreset": "linux-debug-tests",
+      "targets": [
+        "snow-shot-linux-capture-geometry-tests"
       ]
     }
   ],

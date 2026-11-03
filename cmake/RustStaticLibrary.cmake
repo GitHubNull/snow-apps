@@ -261,6 +261,23 @@ function(snow_add_rust_static_libraries batch_name)
     if(_libclang_dir)
         list(APPEND _cargo_environment "LIBCLANG_PATH=${_libclang_dir}")
     endif()
+    if(UNIX AND NOT APPLE)
+        # bindgen discovers the system header search paths by running a clang
+        # executable. Without one (only the venv-bundled libclang is present),
+        # the FFmpeg bindings fail on <limits.h>; supply the GCC search paths
+        # the compiler driver would have contributed.
+        find_program(SNOW_RUST_CLANG_EXECUTABLE NAMES clang)
+        if(NOT SNOW_RUST_CLANG_EXECUTABLE)
+            execute_process(COMMAND "${CMAKE_C_COMPILER}" -print-file-name=include
+                OUTPUT_VARIABLE _gcc_include_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+            set(_bindgen_include_paths "${_gcc_include_dir}")
+            if(CMAKE_LIBRARY_ARCHITECTURE)
+                list(APPEND _bindgen_include_paths "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
+            endif()
+            list(JOIN _bindgen_include_paths ":" _bindgen_include_path)
+            list(APPEND _cargo_environment "CPATH=${_bindgen_include_path}")
+        endif()
+    endif()
 
     if(MSVC AND (CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE STREQUAL "Debug" OR
                  SNOW_APPS_RELEASE_STATIC OR SNOW_SHOT_RELEASE_STATIC))

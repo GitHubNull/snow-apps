@@ -79,7 +79,30 @@ endfunction()
 
 function(snow_resolve_rust_libclang_directory output)
     if(NOT WIN32)
-        set(${output} "" PARENT_SCOPE)
+        set(_directory "")
+        if(DEFINED ENV{LIBCLANG_PATH} AND NOT "$ENV{LIBCLANG_PATH}" STREQUAL "")
+            set(_directory "$ENV{LIBCLANG_PATH}")
+        elseif(UNIX AND NOT APPLE)
+            # Prefer the repository venv's bundled libclang (installed by the
+            # Linux bootstrap), then the system LLVM packages. Returning an
+            # empty directory keeps bindgen's own default search when neither
+            # exists.
+            file(GLOB _candidates
+                "${CMAKE_SOURCE_DIR}/.tools/venv/lib/python*/site-packages/clang/native"
+                "/usr/lib/llvm-*/lib")
+            list(APPEND _candidates
+                "/usr/lib/x86_64-linux-gnu"
+                "/usr/lib/aarch64-linux-gnu"
+                "${SNOW_VCPKG_ROOT}/../llvm/bin")
+            foreach(_candidate IN LISTS _candidates)
+                file(GLOB _libraries "${_candidate}/libclang.so" "${_candidate}/libclang.so.*")
+                if(_libraries)
+                    set(_directory "${_candidate}")
+                    break()
+                endif()
+            endforeach()
+        endif()
+        set(${output} "${_directory}" PARENT_SCOPE)
         return()
     endif()
     snow_windows_rust_host_architecture(_host)

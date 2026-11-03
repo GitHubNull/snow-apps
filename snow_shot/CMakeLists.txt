@@ -376,7 +376,6 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/FetchSnowShotQrModels.cmake")
 snow_shot_fetch_qr_models(SNOW_SHOT_QR_MODELS_DIR)
 find_package(minizip-ng CONFIG REQUIRED)
 include(SnowDiagnostics)
-include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowOcrToolchain.cmake")
 set(SNOW_SHOT_OCR_PROCESS_FEATURES)
 set(SNOW_SHOT_OCR_PROCESS_ENVIRONMENT)
 if(WIN32 OR (APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64"))
@@ -394,16 +393,22 @@ if(APPLE)
         "CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed"
         "CARGO_PROFILE_RELEASE_FAST_SPLIT_DEBUGINFO=packed")
 endif()
-snow_add_rust_executable(snow_ocr_process
-    PACKAGE snow-ocr-process
-    MANIFEST_DIR "${SNOW_SHOT_CAPTURE_CRATES_DIR}"
-    OUTPUT_NAME snow-ocr-process
-    PERFORMANCE_PROFILE
-    REPRODUCIBLE
-    TOOLCHAIN "${SNOW_SHOT_OCR_TOOLCHAIN}"
-    FEATURES ${SNOW_SHOT_OCR_PROCESS_FEATURES}
-    ENVIRONMENT ${SNOW_SHOT_OCR_PROCESS_ENVIRONMENT}
-)
+# The OCR worker depends on the simd-paddle-ocr-rs submodule, which is not
+# initialized for Linux builds; the corresponding feature entries are disabled
+# at runtime on Linux.
+if(WIN32 OR APPLE)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowOcrToolchain.cmake")
+    snow_add_rust_executable(snow_ocr_process
+        PACKAGE snow-ocr-process
+        MANIFEST_DIR "${SNOW_SHOT_CAPTURE_CRATES_DIR}"
+        OUTPUT_NAME snow-ocr-process
+        PERFORMANCE_PROFILE
+        REPRODUCIBLE
+        TOOLCHAIN "${SNOW_SHOT_OCR_TOOLCHAIN}"
+        FEATURES ${SNOW_SHOT_OCR_PROCESS_FEATURES}
+        ENVIRONMENT ${SNOW_SHOT_OCR_PROCESS_ENVIRONMENT}
+    )
+endif()
 
 # The MCP bridge is deliberately a small standalone process.  It only speaks
 # MCP over stdio and connects to an already running Snow Shot instance through
@@ -507,6 +512,12 @@ set_target_properties(snow_shot_image_codec_backend PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN YES
 )
+if(NOT SNOW_SHOT_IMAGE_CODEC_BACKEND_STATIC AND UNIX AND NOT APPLE)
+    # The backend statically embeds Snow Image's bundled codecs. Hiding those
+    # archive symbols keeps GTK's gdk-pixbuf bound to the system libpng instead
+    # of this backend's copy when a native file dialog loads PNG icons.
+    target_link_options(snow_shot_image_codec_backend PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
 
 set(SNOW_SHOT_IMAGE_CODEC_SOURCES
     src/image/snowimageqtcodec.h
@@ -1740,6 +1751,7 @@ set(PROJECT_HEADERS
     include/snow_shot/presentation/components/titlebarwidget.h
     include/snow_shot/presentation/mainwindow.h
     include/snow_shot/presentation/screenshotcapturecoordinator.h
+    include/snow_shot/presentation/capture/screenshotqtcaptureprovider.h
     include/snow_shot/presentation/screenshotcapturedisplaymodelreconciler.h
     include/snow_shot/presentation/screenshotcaptureruntimeadapter.h
     include/snow_shot/presentation/screenshotcapturestate.h
@@ -2123,6 +2135,14 @@ if(APPLE)
         src/platform/macos/systemtraymenu.mm
         src/platform/macos/windowcaptureexclusion.mm)
     list(APPEND PROJECT_HEADERS include/snow_shot/platform/macos/applicationactivation.h)
+elseif(UNIX)
+    # X11 has no display-affinity equivalent; capture exclusion and window IDs
+    # are unsupported and return false / nullopt. The Qt capture provider replaces
+    # the native capture backends, which only exist for Windows and macOS.
+    list(APPEND PROJECT_CXX_SOURCES
+        src/platform/linux/livewindownative.cpp
+        src/platform/linux/windowcaptureexclusion.cpp
+        src/presentation/capture/screenshotqtcaptureprovider.cpp)
 endif()
 
 include(SnowSimd)
@@ -2141,6 +2161,12 @@ qt_add_executable(snow_shot
     MANUAL_FINALIZATION
     ${PROJECT_SOURCES}
 )
+if(UNIX AND NOT APPLE)
+    # The executable statically embeds Snow Image's bundled codecs. Hiding those
+    # archive symbols keeps GTK's gdk-pixbuf bound to the system libpng instead
+    # of this copy when a native file dialog loads PNG icons.
+    target_link_options(snow_shot PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
 snow_shot_link_macos_window_platform(snow_shot)
 if(WIN32 AND SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
     add_dependencies(snow_shot snow_shot_explorer_command)
@@ -9166,7 +9192,9 @@ if(SNOW_SHOT_BUILD_TESTS)
         )
     endif()
 
-    snow_shot_add_ocr_runtime_tests()
+    if(TARGET snow_ocr_process)
+        snow_shot_add_ocr_runtime_tests()
+    endif()
 
     add_executable(snow-shot-ocr-layout-tests
         tests/screenshot_ocr_layout_tests.cpp
@@ -10496,7 +10524,9 @@ target_link_libraries(
 target_compile_definitions(snow_shot PRIVATE
     $<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>
 )
-add_dependencies(snow_shot snow_ocr_process)
+if(TARGET snow_ocr_process)
+    add_dependencies(snow_shot snow_ocr_process)
+endif()
 if(SNOW_SHOT_ENABLE_MCP)
     add_dependencies(snow_shot snow_shot_mcp)
     add_custom_command(TARGET snow_shot POST_BUILD
@@ -10833,7 +10863,7 @@ snow_shot_add_translations(snow_shot)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowShotUpdateUiTests.cmake")
 
 foreach(_ocr_process_host_target IN ITEMS snow_shot snow-shot-ocr-recognition-service-tests)
-    if(TARGET ${_ocr_process_host_target})
+    if(TARGET snow_ocr_process AND TARGET ${_ocr_process_host_target})
         add_dependencies(${_ocr_process_host_target} snow_ocr_process)
         add_custom_command(TARGET ${_ocr_process_host_target} POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
@@ -11156,9 +11186,11 @@ install(TARGETS snow_shot
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-install(PROGRAMS "$<TARGET_FILE:snow_ocr_process>"
-    DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+if(TARGET snow_ocr_process)
+    install(PROGRAMS "$<TARGET_FILE:snow_ocr_process>"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 if(SNOW_SHOT_ENABLE_MCP)
     install(PROGRAMS "$<TARGET_FILE:snow_shot_mcp>"
         DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -11496,6 +11528,8 @@ if(APPLE)
         add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../test-support/x264"
             "${CMAKE_CURRENT_BINARY_DIR}/x264-tests")
     endif()
+elseif(UNIX)
+    include(SnowShotLinux)
 endif()
 
 if(SNOW_SHOT_BUILD_TESTS)
@@ -11505,6 +11539,21 @@ if(SNOW_SHOT_BUILD_TESTS)
     target_include_directories(snow-shot-pinned-placement-tests PRIVATE include src)
     target_link_libraries(snow-shot-pinned-placement-tests PRIVATE Qt6::Gui)
     add_test(NAME snow-shot-pinned-placement-tests COMMAND snow-shot-pinned-placement-tests)
+    if(UNIX AND NOT APPLE)
+        add_executable(snow-shot-linux-capture-geometry-tests
+            tests/linux_capture_geometry_tests.cpp
+            src/presentation/capture/screenshotqtcaptureprovider.cpp
+            src/presentation/core/screenshotgeometry.cpp)
+        target_include_directories(snow-shot-linux-capture-geometry-tests PRIVATE include src)
+        target_link_libraries(snow-shot-linux-capture-geometry-tests PRIVATE Qt6::Gui)
+        snow_shot_offscreen_qpa_environment(_snow_linux_capture_qpa_environment)
+        add_test(NAME snow-shot-linux-capture-geometry-tests
+            COMMAND snow-shot-linux-capture-geometry-tests -platform offscreen)
+        set_tests_properties(snow-shot-linux-capture-geometry-tests PROPERTIES
+            LABELS unit TIMEOUT 30
+            ENVIRONMENT "${_snow_linux_capture_qpa_environment}")
+        unset(_snow_linux_capture_qpa_environment)
+    endif()
     add_executable(snow-shot-feature-action-router-tests tests/feature_action_router_tests.cpp
         src/app/featureavailability.cpp)
     target_include_directories(snow-shot-feature-action-router-tests PRIVATE include)

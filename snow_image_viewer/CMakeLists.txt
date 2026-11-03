@@ -161,6 +161,11 @@ add_executable(snow_image_viewer WIN32
     src/app/main.cpp
     resources/resources.qrc
 )
+if(UNIX AND NOT APPLE)
+    # Hide bundled codec symbols so GTK's gdk-pixbuf keeps using the system
+    # libpng instead of interposing this executable's copy.
+    target_link_options(snow_image_viewer PRIVATE "LINKER:--exclude-libs,ALL")
+endif()
 target_link_libraries(snow_image_viewer PRIVATE snow_image_viewer_lib)
 
 add_executable(snow_image_edit_worker src/editing/worker_main.cpp)

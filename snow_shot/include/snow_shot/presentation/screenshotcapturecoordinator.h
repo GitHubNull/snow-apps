@@ -32,6 +32,11 @@ class ScreenshotCaptureCoordinator final : public QObject {
     void layoutReady(ScreenshotCaptureLayout layout);
 
   private:
+#if defined(Q_OS_LINUX)
+    void finishLinuxCapture(quint64 generation, const ScreenshotCaptureRequest& request);
+
+    quint64 m_linuxGeneration = 0;
+#else
     template <typename Task> bool postWorkerTask(Task&& task);
 
     struct CancellationState;
@@ -39,6 +44,7 @@ class ScreenshotCaptureCoordinator final : public QObject {
     QThread* m_thread = nullptr;
     ScreenshotCaptureWorker* m_worker = nullptr;
     std::shared_ptr<CancellationState> m_activeCancellation;
+#endif
 };
 
 #endif // SNOW_SHOT_PRESENTATION_SCREENSHOTCAPTURECOORDINATOR_H

@@ -81,6 +81,7 @@ impl MonitorId {
         }
     }
 
+    #[cfg(any(windows, target_os = "macos"))]
     pub(crate) fn raw_handle(&self) -> isize {
         self.handle
     }

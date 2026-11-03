@@ -40,13 +40,24 @@ ScreenshotToolPalette::Options screenshotToolbarOptions() {
     options.showWatermarkTool = true;
     options.showTextTool = true;
     options.showSerialNumberTool = true;
+#if defined(Q_OS_LINUX)
+    // Recognition tools need the OCR worker and scrolling capture needs the
+    // native capture backend; neither is built for Linux.
+    options.showOcrTool = false;
+    options.showTextTranslationTool = false;
+    options.showTableTool = false;
+    options.showQrTool = false;
+    options.showScrollingScreenshotTool = false;
+    options.showScreenRecordButton = false;
+#else
     options.showOcrTool = true;
     options.showTextTranslationTool = true;
     options.showTableTool = true;
     options.showQrTool = true;
-    options.showImageConversionTools = true;
-    options.showScreenRecordButton = true;
     options.showScrollingScreenshotTool = true;
+    options.showScreenRecordButton = true;
+#endif
+    options.showImageConversionTools = true;
     options.showSaveButton = true;
     options.showAirDropButton = true;
     options.separatorBeforeShape = true;

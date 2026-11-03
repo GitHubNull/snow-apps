@@ -36,7 +36,7 @@ mkdir -p "$repo_root/.tools"
 if [[ ! -x "$venv/bin/python" ]]; then
     uv venv --python 3.12 "$venv"
 fi
-uv pip install --python "$venv/bin/python" "cmake>=4.2,<5" ninja aqtinstall
+uv pip install --python "$venv/bin/python" "cmake>=4.2,<5" ninja aqtinstall clang-format
 cmake_version="$("$venv/bin/cmake" --version | head -n 1)"
 [[ "$cmake_version" =~ ^cmake[[:space:]]version[[:space:]]([0-9]+)\.([0-9]+) ]] ||
     snow_die "Unable to determine the venv CMake version: ${cmake_version:-unknown}"

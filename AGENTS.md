@@ -18,6 +18,7 @@
 - Windows ARM64: use `snow-shot-msvc-arm64-{debug|performance|release|fast}` and `-Architecture arm64` for bootstrap/Qt/package scripts. ARM64 benchmarks require `snow-shot-msvc-arm64-performance`. Cross builds require native ARM64 validation before production publication.
 - macOS: see `docs-macos-build.md`. Use `scripts/bootstrap-macos.sh`, `scripts/build.sh`, `scripts/run-snow-shot.sh`, and `scripts/package-snow-shot.sh`; presets are `snow-shot-macos-{arm64|x64}-{debug|performance|release|fast}`. macOS requires 15+, Xcode tools and shared Qt 6.12.0. Use only the `performance` preset for benchmarks.
 - macOS script regression checks: `python3 scripts/test-macos-build-support.py`. Native deployment fixture: `SNOW_TEST_MACOS_BUNDLE=1 python3 scripts/test-macos-build-support.py MacOSBundle` after provisioning Qt/FFmpeg and putting the build tools on PATH.
+- Linux: see `docs-linux-build.md`. Run `scripts/install-linux-system-deps.sh`, then `scripts/bootstrap-linux.sh`; use the `linux-debug` presets (`build-linux-debug`, `linux-debug-tests`, `build-linux-snow-shot-tests`) and launch `build/linux-debug/snow_shot/snow_shot` on an X11 session. Snow Shot captures through the Qt provider; recorder, OCR, smart selection, and global shortcuts are unavailable on Linux.
 
 ## Coding Style & Naming Conventions
 - C++: `.clang-format` (LLVM base, 4 spaces, 100 columns, attached braces, `T* ptr`, includes unsorted). Strict warnings are on; `.clang-tidy` is enforced when `SNOW_APPS_ENABLE_CLANG_TIDY=ON`.

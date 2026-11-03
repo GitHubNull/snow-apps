@@ -322,6 +322,13 @@ function(snow_image_configure_target target_name linkage)
     )
     if(linkage STREQUAL "SHARED")
         target_compile_definitions(${target_name} PUBLIC SNOW_IMAGE_SHARED=1)
+        if(UNIX AND NOT APPLE)
+            # Bundled static codec archives (libpng, zlib, ...) must not leak
+            # their symbols from the shared library: GTK's gdk-pixbuf would bind
+            # to them instead of the system libpng and corrupt its heap when a
+            # native file dialog loads PNG icons.
+            target_link_options(${target_name} PRIVATE "LINKER:--exclude-libs,ALL")
+        endif()
     endif()
     if(MSVC)
         target_compile_options(${target_name} PRIVATE

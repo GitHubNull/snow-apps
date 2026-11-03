@@ -62,8 +62,13 @@ FeatureFamily featureFamilyFor(presentation::settings::SettingsGlobalMouseAction
 }
 
 bool isFeatureAvailable(FeatureFamily feature) {
+#if defined(Q_OS_LINUX)
+    // The Linux build has no native screen-recording backend.
+    return feature != FeatureFamily::ScreenRecording;
+#else
     (void)feature;
     return true;
+#endif
 }
 
 FeatureGate::FeatureGate(UnavailableHandler unavailableHandler)

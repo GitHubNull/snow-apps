@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install the Ubuntu/Debian system packages required by the Phase 0 Linux build.
+# Install the Ubuntu/Debian system packages required by the Linux desktop builds.
 # Python tooling is deliberately not installed here; scripts/bootstrap-linux.sh
 # puts CMake, Ninja, and aqtinstall into the repository-local uv environment.
 set -euo pipefail
@@ -9,7 +9,7 @@ snow_die() { printf '%s\n' "$*" >&2; exit 1; }
 
 if [[ "${1:-}" == --help ]]; then
     echo 'Usage: install-linux-system-deps.sh'
-    echo 'Installs the apt packages needed to configure and run the Linux Phase 0 build.'
+    echo 'Installs the apt packages needed to configure and build the Linux desktop apps.'
     exit 0
 fi
 
@@ -25,7 +25,10 @@ command -v apt-get >/dev/null || snow_die 'apt-get was not found.'
 
 packages=(
     # Compilers, CMake-driven port builds, and archive tools used by vcpkg.
-    build-essential pkg-config autoconf automake libtool bison flex
+    # clang/libclang-dev provide the bindgen dependency for the Rust crates;
+    # clang-format is required by the generated icon pack check.
+    build-essential clang libclang-dev clang-format
+    pkg-config autoconf automake libtool bison flex
     patch file git curl ca-certificates tar xz-utils unzip zip bzip2
     nasm yasm
     # OpenGL, X11, xcb, and input libraries required to compile and run Qt.
@@ -52,7 +55,7 @@ fi
 "${apt[@]}" update
 "${apt[@]}" install -y "${packages[@]}"
 
-for tool in gcc g++ pkg-config nasm; do
+for tool in gcc g++ pkg-config nasm clang-format; do
     command -v "$tool" >/dev/null || snow_die "Package installation did not provide $tool."
 done
 

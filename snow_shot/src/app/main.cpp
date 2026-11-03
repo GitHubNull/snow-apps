@@ -114,7 +114,7 @@ startupDiagnosticsOptions(const QString& selectedDirectory, const QString& appli
     return options;
 }
 
-#ifndef Q_OS_MACOS
+#if defined(Q_OS_WIN)
 QString updateInstallationRoot(const QString& executableDirectory) {
     return QFileInfo(executableDirectory).dir().absolutePath();
 }
@@ -492,8 +492,9 @@ int main(int argc, char* argv[]) {
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &singleInstance,
                      [&singleInstance] { singleInstance.stopAcceptingLaunchRequests(); });
 
-#ifndef Q_OS_MACOS
+#if defined(Q_OS_WIN)
     // macOS updates use a downloaded DMG, not the standalone transaction helper.
+    // Linux ships no updater.
     if (!snow_shot::app::distribution::isStoreManaged()) {
         QString executablePath = QString::fromLocal8Bit(argv[0]);
 #ifdef Q_OS_WIN
@@ -559,7 +560,7 @@ int main(int argc, char* argv[]) {
 #ifdef Q_OS_MACOS
     diagnosticsOptions.handlerPath =
         QDir(selectedStorage.executableDirectory).filePath(QStringLiteral("crashpad_handler"));
-#else
+#elif defined(Q_OS_WIN)
     diagnosticsOptions.handlerPath =
         QDir(selectedStorage.executableDirectory).filePath(QStringLiteral("crashpad_handler.exe"));
 #endif
@@ -766,8 +767,16 @@ int main(int argc, char* argv[]) {
         applicationController.showMainWindow();
     snow_shot::diagnostics::logEvent(QStringLiteral("snow_shot.app"),
                                      QStringLiteral("application.ready"));
-    if (!launchArguments.contains(QStringLiteral("--autostart")) &&
-        launchArguments.contains(QStringLiteral("--show-main-window"))) {
+#if defined(Q_OS_LINUX)
+    // Without global hotkeys or a floating toolbar surface, the main window is
+    // the discoverable capture entry point on Linux.
+    const bool showMainWindowOnStartup = !launchArguments.contains(QStringLiteral("--autostart"));
+#else
+    const bool showMainWindowOnStartup =
+        !launchArguments.contains(QStringLiteral("--autostart")) &&
+        launchArguments.contains(QStringLiteral("--show-main-window"));
+#endif
+    if (showMainWindowOnStartup) {
         applicationController.showMainWindow();
     }
     return QApplication::exec();
