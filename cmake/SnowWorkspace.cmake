@@ -33,6 +33,12 @@ function(snow_workspace_configure_paths)
             include(SnowWindowsArchitecture)
             snow_configure_windows_architecture()
             set(_snow_default_triplet "${SNOW_WINDOWS_ARCHITECTURE}-windows")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+                set(_snow_default_triplet "arm64-linux")
+            else()
+                set(_snow_default_triplet "x64-linux")
+            endif()
         else()
             set(_snow_default_triplet "x64-windows")
         endif()
@@ -57,7 +63,8 @@ function(snow_workspace_configure_paths)
         if(NOT IS_DIRECTORY "${${_required_dir}}")
             message(FATAL_ERROR
                 "${_required_dir} does not exist: ${${_required_dir}}. "
-                "Run scripts/bootstrap.ps1 or set the path explicitly.")
+                "Run the platform bootstrap script (scripts/bootstrap.ps1, "
+                "scripts/bootstrap-macos.sh, or scripts/bootstrap-linux.sh) or set the path explicitly.")
         endif()
     endforeach()
 
