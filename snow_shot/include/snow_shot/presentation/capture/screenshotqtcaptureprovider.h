@@ -19,8 +19,11 @@ class ScreenshotQtCaptureProvider {
     [[nodiscard]] static QVector<CapturedDisplayModel> layoutDisplays();
 
     // Grabs one frame per display. Returns an empty vector and sets errorMessage
-    // when no complete frame set can be acquired.
-    [[nodiscard]] static QVector<CapturedDisplayModel> captureDisplays(QString* errorMessage);
+    // when no complete frame set can be acquired. When captureCursor is set the
+    // XFixes cursor shape is composited into each frame it overlaps and the
+    // display models carry cursor patches for color-picker compensation.
+    [[nodiscard]] static QVector<CapturedDisplayModel> captureDisplays(QString* errorMessage,
+                                                                       bool captureCursor = false);
 
     // Stable display id of the screen containing the global position, computed
     // with the same ordering and dedupe rules as layoutDisplays(). Empty when

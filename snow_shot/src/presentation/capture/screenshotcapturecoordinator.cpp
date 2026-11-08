@@ -6,6 +6,9 @@
 
 #if defined(Q_OS_LINUX)
 #include "snow_shot/presentation/capture/screenshotqtcaptureprovider.h"
+#include "snow_shot/storage/settingsadapters.h"
+
+#include <algorithm>
 #endif
 
 #include "snow_capture.h"
@@ -202,9 +205,12 @@ void ScreenshotCaptureCoordinator::finishLinuxCapture(quint64 generation,
     ScreenshotCaptureResult result;
     result.requestId = request.requestId;
     result.purpose = request.purpose;
-    result.displays = ScreenshotQtCaptureProvider::captureDisplays(&result.errorMessage);
+    result.displays = ScreenshotQtCaptureProvider::captureDisplays(
+        &result.errorMessage, snow_shot::storage::ScreenshotSettings().showCursor());
     result.succeeded = !result.displays.isEmpty();
-    result.cursorAvailable = false;
+    result.cursorAvailable = std::any_of(
+        result.displays.cbegin(), result.displays.cend(),
+        [](const CapturedDisplayModel& display) { return !display.cursorPatch.isNull(); });
     emit captureFinished(std::move(result));
 }
 #else

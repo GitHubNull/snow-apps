@@ -45,6 +45,37 @@ namespace snow_shot::presentation::capture::qtcapture {
     return frame.copy(cropRect);
 }
 
+// Placement of a global-positioned cursor image inside one display's frame.
+struct CursorPlacement {
+    // Destination rect in display-local (physical) pixels.
+    QRect pixelRect;
+    // Source rect inside the cursor image after clipping to the display.
+    QRect sourceRect;
+    bool visible = false;
+};
+
+[[nodiscard]] inline CursorPlacement cursorPlacement(const QRect& displayRect,
+                                                     const QPoint& cursorGlobalPos,
+                                                     const QPoint& hotspot,
+                                                     const QSize& cursorSize) {
+    CursorPlacement placement;
+    if (displayRect.isEmpty() || cursorSize.isEmpty()) {
+        return placement;
+    }
+    // The hotspot anchors the cursor image's active pixel to the pointer
+    // position, so the image's top-left sits one hotspot up-left of it.
+    const QRect globalRect(
+        QPoint(cursorGlobalPos.x() - hotspot.x(), cursorGlobalPos.y() - hotspot.y()), cursorSize);
+    const QRect clipped = globalRect.intersected(displayRect);
+    if (clipped.isEmpty()) {
+        return placement;
+    }
+    placement.pixelRect = clipped.translated(-displayRect.topLeft());
+    placement.sourceRect = clipped.translated(-globalRect.topLeft());
+    placement.visible = true;
+    return placement;
+}
+
 } // namespace snow_shot::presentation::capture::qtcapture
 
 #endif // SNOW_SHOT_PRESENTATION_CAPTURE_SCREENSHOTQTCAPTUREGEOMETRY_H

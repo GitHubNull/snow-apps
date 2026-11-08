@@ -80,7 +80,7 @@ DirectCaptureFrame grabOnGuiThread(const DirectCaptureRequest& request) {
     DirectCaptureFrame frame;
     QString error;
     const QVector<CapturedDisplayModel> displays =
-        ScreenshotQtCaptureProvider::captureDisplays(&error);
+        ScreenshotQtCaptureProvider::captureDisplays(&error, request.captureCursor);
     if (displays.isEmpty()) {
         frame.error = error.isEmpty()
                           ? QCoreApplication::translate("DirectCaptureController",

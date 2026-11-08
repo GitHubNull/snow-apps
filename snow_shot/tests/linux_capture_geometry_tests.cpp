@@ -139,6 +139,35 @@ void captureMatchesLayoutIdentity() {
                 "desktop frames must be opaque RGB32 like the native backends");
     }
 }
+
+void cursorPlacementClipsAgainstDisplayBounds() {
+    const QRect displayRect(0, 0, 1920, 1080);
+    const QSize cursorSize(24, 24);
+
+    // Fully inside: the image maps one hotspot up-left of the pointer.
+    auto inside = qtcapture::cursorPlacement(displayRect, {600, 300}, {4, 4}, cursorSize);
+    require(inside.visible && inside.pixelRect == QRect(596, 296, 24, 24) &&
+                inside.sourceRect == QRect(0, 0, 24, 24),
+            "interior cursor keeps the full image");
+
+    // Crossing the display's left edge clips the source, not just the target.
+    auto leftEdge = qtcapture::cursorPlacement(displayRect, {2, 300}, {4, 4}, cursorSize);
+    require(leftEdge.visible && leftEdge.pixelRect == QRect(0, 296, 22, 24) &&
+                leftEdge.sourceRect == QRect(2, 0, 22, 24),
+            "left-edge cursor clips the source image columns");
+
+    // Wholly outside the display never produces a placement.
+    auto outside = qtcapture::cursorPlacement(displayRect, {-40, 300}, {4, 4}, cursorSize);
+    require(!outside.visible, "off-display cursor is invisible");
+
+    // Negative-origin displays keep display-local coordinates relative to
+    // their own top-left.
+    const QRect negativeDisplay(-1920, 0, 1920, 1080);
+    auto negative = qtcapture::cursorPlacement(negativeDisplay, {-960, 540}, {4, 4}, cursorSize);
+    require(negative.visible && negative.pixelRect == QRect(956, 536, 24, 24) &&
+                negative.sourceRect == QRect(0, 0, 24, 24),
+            "negative-origin display offsets cursor locally");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -148,6 +177,7 @@ int main(int argc, char** argv) {
     cropHandlesPerScreenGrabsAndMismatches();
     layoutMatchesScreens();
     captureMatchesLayoutIdentity();
+    cursorPlacementClipsAgainstDisplayBounds();
     std::cout << "snow shot linux capture geometry tests passed\n";
     return 0;
 }

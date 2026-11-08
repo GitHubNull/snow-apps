@@ -2,11 +2,13 @@
 
 #include "screenshotqtcapturegeometry.h"
 
+#include "snow_shot/platform/linux/x11cursor.h"
 #include "snow_shot/presentation/screenshotgeometry.h"
 
 #include <QColorSpace>
 #include <QGuiApplication>
 #include <QImage>
+#include <QPainter>
 #include <QPixmap>
 #include <QScreen>
 #include <QSet>
@@ -86,7 +88,8 @@ QString ScreenshotQtCaptureProvider::displayStableIdAt(const QPoint& position) {
     return matched;
 }
 
-QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::captureDisplays(QString* errorMessage) {
+QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::captureDisplays(QString* errorMessage,
+                                                                           bool captureCursor) {
     if (errorMessage != nullptr) {
         errorMessage->clear();
     }
@@ -97,6 +100,12 @@ QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::captureDisplays(QStri
         }
         return {};
     }
+
+    // Sampling the cursor costs an X connection; skip it entirely when the
+    // caller did not ask for the cursor.
+    const snow_shot::platform::x11::X11CursorSample cursor =
+        captureCursor ? snow_shot::platform::x11::fetchCursorImage()
+                      : snow_shot::platform::x11::X11CursorSample{};
 
     QVector<CapturedDisplayModel> displays;
     QSet<QString> usedIds;
@@ -125,6 +134,21 @@ QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::captureDisplays(QStri
         if (frame.isNull()) {
             complete = false;
             break;
+        }
+        if (cursor.valid) {
+            const qtcapture::CursorPlacement placement = qtcapture::cursorPlacement(
+                displayRect, cursor.position, cursor.hotspot, cursor.image.size());
+            if (placement.visible) {
+                QPainter painter(&frame);
+                painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                painter.drawImage(placement.pixelRect.topLeft(), cursor.image,
+                                  placement.sourceRect);
+                painter.end();
+                // The patch lets the color picker compensate for cursor pixels
+                // covering the sampled point, mirroring the native backends.
+                displays[index].cursorPatch = cursor.image.copy(placement.sourceRect);
+                displays[index].cursorPixelRect = placement.pixelRect;
+            }
         }
         displays[index].image = std::move(frame);
     }
