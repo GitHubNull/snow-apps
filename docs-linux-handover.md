@@ -1,14 +1,14 @@
 # Snow Apps Linux 桌面支持交接文档
 
-- 更新时间：2026-11-08
+- 更新时间：2026-11-09
 - 仓库：`/home/wgh/dev/cross_platform_app/snow-apps`
-- 分支 / 提交：`main` @ `2c10a004`，与 `origin/main`（`GitHubNull/snow-apps`）一致
-- 工作区：本文件与 `docs-linux-build.md` 的两处事实修正尚未提交，其余干净
+- 分支 / 提交：`main` @ `ed9b305b`（P0+P1 全部完成，领先 `origin/main` 13 个提交，尚未 push）
+- 工作区：干净
 - 本文自包含：接手代理不需要旧会话上下文
 
 ## 0. 给接手代理的第一段话
 
-Linux 适配已经完成阶段 0-2：Snow Image Viewer 和 Snow Shot 的“选区截图 → 标注 → 复制/保存 → 静态贴图”核心链路已在真实 X11 桌面验证并提交。**不要重做已完成部分**，剩余工作集中在：可复现构建、Linux 安装/打包、全局快捷键、直连截屏、光标/窗口排除、Wayland 与多屏验证。
+Linux 适配已经完成阶段 0-3：Snow Image Viewer 和 Snow Shot 的“选区截图 → 标注 → 复制/保存 → 静态贴图”核心链路、X11 全局快捷键、直连截屏（当前显示器/聚焦窗口/MCP）、XFixes 光标合成、自身窗口排除、Wayland 检测与提示、安装树（含捆绑 Qt 与 `.desktop`）均已实现并通过自动化测试。**不要重做已完成部分**，剩余工作只剩：解锁桌面后的真人 UI 复验（见 §8 清单）、P1-E（剪贴板/输入法验证）与 P2 功能缺位（默认不做）。
 
 开始前请先读完本文和 `docs-linux-build.md`。硬性规则：
 
@@ -29,6 +29,24 @@ Linux 适配已经完成阶段 0-2：Snow Image Viewer 和 Snow Shot 的“选�
 | `abe619f9` | 阶段 1：Viewer 在 X11 上打开/编辑/导出，Unicode 路径修复 |
 | `2c10a004` | 阶段 2：Snow Shot 构建、Qt 截图提供者、Coordinator Linux 分支、功能门禁、几何测试、文档 |
 
+阶段 3（P0+P1，2026-11-08/09 完成，尚未 push）：
+
+| 提交 | 内容 |
+| --- | --- |
+| `f2197225` | 文档事实修正（托盘宿主、会话日志） |
+| `08ae2b95` | bootstrap venv 钉死 libclang 18.1.1 / clang-format 23.1.3（P0-A） |
+| `7ed5e165` | `linux-release` 预设 + Qt 部署 + `$ORIGIN/../lib` RPATH + `.desktop`（P0-B） |
+| `9688b082` | X11 共享层：连接、grabkey、cursor、windowquery（P0-C/P1-A/P1-B 基础） |
+| `c2398acf` | `XGrabKey` 全局快捷键后端（P0-C） |
+| `46664eec` | Linux 直连截屏（当前显示器/聚焦窗口/MCP，`SNOW_CAPTURE_BACKEND_X11_QT`）（P0-D） |
+| `62e63c22` | 托盘/命令过滤：不可用命令在 Linux 隐藏（P0-D） |
+| `9c1a060d` | X11 直连截屏源接入构建（接线修复） |
+| `89df494b` | XFixes 光标合成（P1-A） |
+| `371dd5b8` | 抓屏前隐藏自身窗口（P1-B） |
+| `2800efb4` | shield include 路径修复 |
+| `a394d2e4` | Wayland 会话检测 + 功能门禁 + 启动警告（P1-C） |
+| `ed9b305b` | 多屏负原点并集 + 混合 DPI 物理矩形测试（P1-D） |
+
 ### 1.2 已验证可用（真实 X11，1920×1080 单屏）
 
 - Snow Image Viewer：打开 PNG/JPEG/WebP/GIF、OpenGL 显示、缩放、编辑、导出。
@@ -40,17 +58,21 @@ Linux 适配已经完成阶段 0-2：Snow Image Viewer 和 Snow Shot 的“选�
 - 几何单测 `snow-shot-linux-capture-geometry-tests` 通过（约 0.33 s，offscreen）。
 - 运行时日志实际存在：`~/.local/share/SnowShot/snow_shot/logs/<date>/*.log`（JSON 行）。
 - 托盘：验证会话存在 StatusNotifier host；应用运行时会注册 `StatusNotifierItem`（实测应用连接 `:1.532` 出现在 watcher 列表）。是否在面板可见取决于桌面托盘插件，但“Cinnamon 完全没有托盘宿主”的旧说法已被推翻。
+- 安装树：bundled Qt + `$ORIGIN/../lib` RPATH，`ldd` 0 个缺失、`nm -D` 无 `png_` 导出；窗口启动与 `.desktop`（gio launch）均验证通过（P0-B）。
+- bootstrap 可复现：删除 `.tools/venv` 后重装 + 强制 bindgen 重跑，`snow_shot` 构建成功（P0-A）。
+- 全局快捷键：`global-shortcut-manager` 单测 + 真实 X11 grab 的 native smoke 测试通过（P0-C）。
+- 直连截屏：workflow/frame/native 单测通过；托盘“当前显示器/聚焦窗口”入口代码路径与单屏回归测试一致（P0-D，真人 UI 复验待解锁桌面）。
+- 光标合成、自身窗口排除、多屏/混合 DPI 几何：对应单测全部通过（P1-A/B/D，真人 UI 复验待解锁桌面）。
 
 ### 1.3 明确不可用或未实现
 
 - 录屏（`FeatureFamily::ScreenRecording` 在 Linux 返回 false）。
 - OCR、翻译、二维码、表格、LaTeX（OCR 子模块未初始化，`snow_ocr_process` 不构建）。
 - 智能选区、窗口选区、滚动截图、实时贴图窗口。
-- 全局快捷键、全局鼠标手势（`UnsupportedGlobalShortcutBackend`）。
-- 截图不含光标；自身窗口排除为桩实现。
-- 自动更新、Crashpad 崩溃上报、打印、AirDrop、安装包。
-- Wayland、多显示器、混合 DPI 未验证。
-- 直连截屏（当前显示器 / 聚焦窗口 / MCP 截屏）在 Linux 上不可用。
+- 全局鼠标手势（`UnsupportedGlobalMouseBackend`）；全局键盘快捷键已可用（`XGrabKey`）。
+- 自动更新、Crashpad 崩溃上报、打印、AirDrop。
+- Wayland：已做检测与提示（功能门禁 + 启动警告），但 Wayland 原生截屏未实现；多显示器/混合 DPI 有几何测试覆盖，真人多屏复验待解锁桌面。
+- DEB/RPM/AppImage 等发行级打包未做（`cmake --install` 树已可用）。
 
 ## 2. 快速开始
 
@@ -116,7 +138,11 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ## 4. 剩余任务（按优先级）
 
+> **状态（2026-11-09）**：P0-A、P0-B、P0-C、P0-D、P1-A、P1-B、P1-C、P1-D 均已完成（见 §1.1 阶段 3 提交表）。以下各节保留原始任务描述供追溯；除 P1-E 与 P2 外不再有待办实现工作。真人 UI 复验清单见 §8。
+
 ### P0-A 构建可复现：系统 clang / libclang
+
+**状态：已完成（`08ae2b95`）。** 采纳方案 A：`scripts/bootstrap-linux.sh` 的 venv 安装列表已钉死 `libclang==18.1.1` 与 `clang-format==23.1.3`；全新 venv 复现验证通过。以下保留原描述：
 
 **现状与证据**
 
@@ -137,6 +163,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 - `docs-linux-build.md` 的依赖说明与实际脚本一致。
 
 ### P0-B Linux 安装 / 打包
+
+**状态：已完成（`7ed5e165`）。** `qt_generate_deploy_app_script` 捆绑 Qt 运行库 + 插件白名单 + `INSTALL_RPATH=$ORIGIN/../lib`，安装 `bin/`+`lib/`+`.desktop`；仓库外移动后裸跑验证通过。以下保留原描述：
 
 **现状与证据**
 
@@ -170,6 +198,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ### P0-C 全局快捷键（X11）
 
+**状态：已完成（`9688b082`、`c2398acf`）。** `XGrabKey` 后端已接入现有 `GlobalShortcutBackend` 工厂；lock-mask 组合、冲突回滚、native smoke 均验证。以下保留原描述：
+
 **现状与证据**
 
 - `snow_shot/src/presentation/services/globalshortcutbackend.cpp:36` 的工厂只在 Windows/macOS 返回实现，其他平台返回 `UnsupportedGlobalShortcutBackend`。
@@ -195,6 +225,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ### P0-D Linux 直连截屏与托盘菜单可用性
 
+**状态：已完成（`46664eec`、`62e63c22`、`9c1a060d`）。** 直连截屏走 GUI 线程 grab + 每屏裁剪，聚焦窗口经 `_NET_ACTIVE_WINDOW` + `XTranslateCoordinates`；托盘/命令对不可用功能做 Linux 过滤。以下保留原描述：
+
 **现状与证据**
 
 - 托盘菜单仍列出“当前显示器”“聚焦窗口”“OCR/翻译”等命令，但没有按平台过滤。
@@ -217,6 +249,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ### P1-A 截图包含光标（XFixes）
 
+**状态：已完成（`89df494b`）。** GUI 线程采样 `XFixesGetCursorImage`，预乘后合成进帧；取色器经 `cursorPatch`/`cursorPixelRect` 补偿。以下保留原描述：
+
 **现状**
 
 - 提供者抓的是不含光标的根窗口；设置里的“显示光标”在 Linux 上仍可见但无效。
@@ -234,6 +268,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 - 多屏/负坐标下光标不偏移（与 P1-D 一起测）。
 
 ### P1-B 自身窗口排除
+
+**状态：已完成（`371dd5b8`、`2800efb4`）。** 抓屏前隐藏全部可见顶层窗口并等待 X 报告 unviewable（shield），抓完恢复；单测覆盖。以下保留原描述：
 
 **现状**
 
@@ -254,6 +290,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ### P1-C Wayland 检测与降级
 
+**状态：已完成（`a394d2e4`）。** 仅字面 `wayland` QPA 触发门禁（offscreen/minimal 不受影响）；主窗口与启动警告均有用户可见提示。以下保留原描述：
+
 **现状**
 
 - `QScreen::grabWindow(0)` 在 Wayland 下会失败或截黑；当前没有启动检测，失败信息是通用的 X11 抓屏失败。
@@ -272,6 +310,8 @@ Viewer 测试（仅在改到 viewer 时运行）：
 - X11 行为不变。
 
 ### P1-D 多显示器与混合 DPI 验证
+
+**状态：几何测试已完成（`ed9b305b`）。** 负原点双屏并集、混合 DPI 物理矩形（1.0/2.0/1.25）取整、QPainter 颜色溯源均在 offscreen 单测覆盖；Xephyr Zaphod 双屏真人复验待解锁桌面。以下保留原描述：
 
 **现状**
 
@@ -363,7 +403,7 @@ nm -D build/linux-debug/snow_shot/libsnow_shot_image_codec_backend.so | grep -c 
 
 ## 7. Git 与交付
 
-- 当前 `main` 已推送到 `origin`（`2c10a004`），工作区只剩本文和 `docs-linux-build.md` 的修正未提交。
+- 当前 `main` 在 `ed9b305b`，领先 `origin/main` 13 个提交，**尚未 push**（用户未明确要求）；工作区干净。
 - 每个任务单独提交，遵循 Conventional Commits，例如：
   - `build(linux): deploy Qt runtime and add install preset`
   - `feat(shortcuts): register X11 global hotkeys`
@@ -376,12 +416,21 @@ nm -D build/linux-debug/snow_shot/libsnow_shot_image_codec_backend.so | grep -c 
 
 P0 全部完成并满足各自验收，P1 至少完成光标/窗口排除/Wayland 提示中的用户指定项，且：
 
-- 安装版能在仓库外独立启动；
-- 全局快捷键可用或明确标注不支持；
-- 托盘/快捷键不再出现静默失败；
-- 单屏 X11 核心截图链路无回归；
-- `docs-linux-build.md`、`AGENTS.md` 与实际行为一致；
-- 所有改动通过相关测试与格式检查，工作区状态在交接说明中写清楚。
+- 安装版能在仓库外独立启动；✅（P0-B 已验证）
+- 全局快捷键可用或明确标注不支持；✅（P0-C 已验证）
+- 托盘/快捷键不再出现静默失败；✅（P0-D 过滤已提交，真人复验待解锁桌面）
+- 单屏 X11 核心截图链路无回归；✅（阶段 2 已验证）
+- `docs-linux-build.md`、`AGENTS.md` 与实际行为一致；✅（T10 文档收口，2026-11-09）
+- 所有改动通过相关测试与格式检查，工作区状态在交接说明中写清楚。✅
+
+**待解锁桌面后的真人 UI 复验清单**（自动化均已通过，仅差真实桌面确认）：
+
+1. T3：按下已绑定全局快捷键 → 截图 overlay 出现。
+2. T4：托盘“当前显示器 / 聚焦窗口”直连截屏出图正确。
+3. T6：开启/关闭“截图包含光标”对比验证光标合成。
+4. T7：截图帧中不含主窗口 / 浮动工具栏 / 贴图窗口。
+5. T9：Xephyr Zaphod 双屏 + 混合 DPI 几何实测。
+6. 安装版复验：用 §6.2 的方式启动安装树再跑一遍核心链路。
 
 ## 9. 本次已顺手修正的文档事实
 

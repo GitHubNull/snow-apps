@@ -1,4 +1,4 @@
-# Linux build support (Phases 0-2)
+# Linux build support (Phases 0-3)
 
 Phase 0 verified that the Linux presets compile the shared libraries and Snow
 Image Viewer. Phase 1 made Snow Image Viewer usable on a real X11 desktop: it
@@ -6,7 +6,11 @@ opens PNG/JPEG/WebP/GIF images, renders them with OpenGL, and resizes/exports
 through the isolated `snow_image_edit_worker` process. Phase 2 builds Snow Shot
 itself and runs the screenshot workflow on X11 with a Qt-based capture provider:
 launch the main window, take a screenshot, drag a selection, edit it, and copy or
-save the result.
+save the result. Phase 3 closes the P0/P1 gaps: reproducible bootstrap with a
+pinned venv toolchain, an install tree with a desktop entry and bundled Qt
+runtime, X11 global shortcuts, direct capture from the tray/MCP entry points,
+cursor compositing through XFixes, hiding the app's own windows before grabs,
+Wayland session detection, and multi-screen/mixed-DPI geometry tests.
 
 The native Rust capture backends (Windows Graphics Capture, ScreenCaptureKit)
 and the Cocoa/CoreGraphics platform layer remain unavailable on Linux. Snow Shot
@@ -124,9 +128,24 @@ editor lifecycle, generated icon packs, and non-ASCII paths
 (`snow_image_viewer_unicode_path_tests`, which runs `--unicode-path-only`).
 
 `snow-shot-linux-capture-geometry-tests` covers the Linux capture provider:
-display model identity (stable IDs, `physicalRect`, DPR, canvas coordinates) and
-virtual-desktop cropping offsets. It runs offscreen and does not capture the real
-desktop.
+display model identity (stable IDs, `physicalRect`, DPR, canvas coordinates),
+virtual-desktop cropping offsets, negative-origin multi-screen unions, and
+mixed-DPI physical-rect rounding (`physicalRectForGeometry`). It runs offscreen
+and does not capture the real desktop. Build it with
+`build-linux-snow-shot-tests`.
+
+`snow-shot-linux-x11-logic-tests` covers the X11 shortcut/window helpers
+offscreen: lock-mask combinations, Qt-to-X11 keysym mapping and unmappable
+shortcut rejection, key-press classification, and the capture window shield
+hiding and restoring the app's own top-level widgets (with
+`WA_DontShowOnScreen` stand-ins).
+
+The Snow Shot unit tests for the shortcut manager, settings catalog, feature
+action router, system tray controller, direct-capture workflow/frame, and
+global mouse stack run offscreen like their Windows/macOS counterparts; filter
+them with `ctest -R 'snow-shot'`. The interactive
+`snow-shot-global-shortcut-native-smoke` test claims real X11 key grabs and
+must run on a live X11 display.
 
 ## Desktop smoke test (X11)
 
@@ -165,14 +184,12 @@ on the overlay, and use the toolbar to edit, copy, or save:
 DISPLAY=:0 ./build/linux-debug/snow_shot/snow_shot
 ```
 
-The floating toolbar is the most reliable capture entry on Linux. When the
-desktop provides a StatusNotifier host, the tray icon registers and the tray
-menu is available; on the validation Cinnamon session the watcher reported a
-registered host and listed the running app's `StatusNotifierItem`. On desktops
-without a tray or StatusNotifier host, only the floating toolbar and the main
-window remain. The tray menu still lists recognition and recording commands:
-recording is feature-gated, and the recognition commands reach the screenshot
-step before failing because the OCR backend is not built.
+The floating toolbar and the global shortcuts are the most reliable capture
+entries on Linux. When the desktop provides a StatusNotifier host, the tray
+icon registers and the tray menu is available; on desktops without a tray or
+StatusNotifier host, only the floating toolbar, the main window, and the
+global shortcuts remain. The tray menu hides the commands that cannot run on
+Linux (recording, OCR/translation family) instead of listing dead items.
 
 Verify the clipboard and the saved file independently:
 
@@ -211,7 +228,10 @@ see the known limitations.
   semantics, so the capture workflow, overlay, and toolbar code are unchanged.
 - Frame images are `QImage::Format_RGB32` with device pixel ratio 1 and sRGB
   color space, sized to the physical rectangle of each display. The cursor is
-  not composited into the capture.
+  composited into the frame through XFixes (`XFixesGetCursorImage`, sampled on
+  the GUI thread right before the grab and premultiplied into the frame) when
+  the "Show cursor" screenshot setting is on; the color picker's
+  `cursorPatch`/`cursorPixelRect` account for the extra cursor pixels.
 - Rust still builds the `snow-capture`, `snow-recording-c`, and draw-engine
   static bundles because the C++ code links them for editing and export. The
   capture provider never calls the Rust capture backend on Linux; the Rust
@@ -220,12 +240,22 @@ see the known limitations.
   closure from `cmake/SnowShotLinux.cmake`. Cargo's native link metadata is not
   propagated to CMake for static archives, so the same closure is attached to
   the Rust FFI interface targets and the `snow_shot` executable.
-- Windows-only integration points are stubbed: `setWindowExcludedFromCapture`
-  returns `false` and `captureWindowId` returns `std::nullopt` from
-  `snow_shot/src/platform/linux/windowcaptureexclusion.cpp`. The startup
-  updater transaction, crashpad handler, and startup registration services are
-  compiled only for Windows/macOS; on Linux the application starts with the main
-  window visible unless `--autostart` is passed.
+- Windows-only integration points are stubbed: `captureWindowId` returns
+  `std::nullopt` from `snow_shot/src/platform/linux/windowcaptureexclusion.cpp`.
+  Own-window exclusion is implemented on X11 instead: before a grab, the
+  coordinator hides every visible top-level widget of the app
+  (`capturewindowshield.cpp`) and waits for the X server to report them
+  unviewable, so the app's main window, toolbar, and pinned windows never
+  appear in the captured frame. The startup updater transaction, crashpad
+  handler, and startup registration services are compiled only for
+  Windows/macOS; on Linux the application starts with the main window visible
+  unless `--autostart` is passed.
+- Direct capture (tray "Capture current monitor" / "Capture focused window" and
+  the MCP capture entry points) runs on Linux through
+  `directcaptureqtx11.cpp`: the worker thread asks the GUI thread to perform
+  the root grab and per-display crop, resolving the focused window via
+  `_NET_ACTIVE_WINDOW` and `XTranslateCoordinates` for the crop rectangle.
+  The backend reports `SNOW_CAPTURE_BACKEND_X11_QT`.
 - The targets that embed Snow Image's bundled codec archives
   (`snow_image_shared`, `snow_shot_image_codec_backend`, and the
   `snow_shot`/`snow_image_viewer` executables) link with
@@ -238,6 +268,48 @@ see the known limitations.
   include directories to `CPATH` so the FFmpeg bindings can resolve system
   headers. Installing `clang`/`libclang-dev` from the system dependency script
   keeps the regular discovery path.
+
+## Linux global shortcuts (Phase 3)
+
+Global shortcuts on X11 use `XGrabKey` through the shared
+`snow_shot/src/platform/linux/` helpers:
+
+- `x11connection.cpp` owns one RAII display connection and installs a
+  process-wide no-op X11 error handler so `BadAccess` conflicts from other
+  grabbers never reach Qt's handler.
+- `x11grabkey.cpp` maps Qt keys/keypad variants to X11 keysyms, rejects
+  unmappable or multi-stroke shortcuts, and grabs every lock-mask combination
+  (Lock/Mod2/Mod5) so Caps Lock and layout modifiers do not mask the grab.
+  A conflicting grab rolls back already-registered grabs and reports the
+  conflict instead of half-registering.
+- `globalshortcutbackend.cpp` feeds key events into the existing
+  `GlobalShortcutBackend` contract; the registry/settings UI and the rest of
+  the shortcut stack are platform-neutral and unchanged.
+
+The shortcut backend source is excluded from the unity build
+(`SKIP_UNITY_BUILD_INCLUSION`) because the X11 headers must not leak into
+other translation units. The backend is only constructed when the session is
+not Wayland (see below); otherwise the app keeps the unsupported-backend
+fallback.
+
+## Install and packaging (Phase 3)
+
+`cmake --install` (or the `linux-release` preset) installs Snow Shot with
+`qt_generate_deploy_app_script` bundling the Qt libraries the binary actually
+links, a curated plugin whitelist, and `INSTALL_RPATH` `$ORIGIN/../lib`, into
+`bin/snow_shot` + `lib/` + `share/applications/snow-shot.desktop`. The desktop
+entry sets `StartupWMClass=snow_shot` so the window groups with the launcher,
+and carries localized `Name`/`Comment` for zh. The install tree runs without
+any system Qt and passes the `ldd`/`nm -D png_` symbol-isolation checks
+described below.
+
+## Wayland session detection (Phase 3)
+
+`featureavailability.cpp` blocks the screenshot feature family when the
+application runs on the literal `wayland` QPA platform, and both the main
+window and startup warning surfaces tell the user that capture needs an X11
+session (with XWayland available as a fallback session type). The offscreen
+and minimal QPA platforms used by tests do not trip the gate.
 
 ## Linux-specific runtime fixes (Phase 1)
 
@@ -270,13 +342,11 @@ see the known limitations.
   updating) pinned window capture is unavailable: `liveWindowTargetAtPoint`
   returns `nullopt` and the pin-window action reports that no capturable window was
   found.
-- Global shortcuts and global mouse gestures fall back to the existing
-  `UnsupportedGlobalShortcutBackend` / `UnsupportedGlobalMouseBackend` behavior.
-  Start captures from the floating toolbar (enable it under Settings -> "Tray &
-  floating toolbar" -> Floating toolbar -> "Show toolbar") or from the tray menu
-  where the desktop provides a system tray.
-- The capture does not include the cursor, and window capture exclusion is
-  unsupported: the app's own windows are not hidden from the captured frame.
+- Global mouse gestures fall back to the unsupported backend. Global keyboard
+  shortcuts work through `XGrabKey` on X11 sessions.
+- Wayland sessions are detected and the screenshot feature family is gated off
+  with a user-visible explanation; the verified desktop path is X11 with
+  OpenGL 3.3 or newer (XWayland follows the X11 path on a best-effort basis).
 - The GPU-resident edit pipeline is Windows-only. On Linux the viewer displays
   images through QRhi/OpenGL but resizes and exports with the CPU reference path
   and the isolated worker. `snow_image_viewer_edit_mode_performance` therefore
@@ -289,4 +359,5 @@ see the known limitations.
 - Snow Shot writes structured JSON session logs on Linux under
   `~/.local/share/SnowShot/snow_shot/logs/<date>/`. Crashpad crash reporting and
   automatic upload remain Windows-only; diagnostics also go to stderr.
-- Packaging, installers, static Qt, and ARM64 are out of scope.
+- Packaging beyond the plain `cmake --install` tree (DEB/RPM/AppImage,
+  installer scripts), static Qt, and ARM64 are out of scope.
