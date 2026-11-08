@@ -1023,6 +1023,28 @@ elseif(APPLE)
         src/platform/macos/focusedfullscreenwindow.mm)
 endif()
 list(APPEND SNOW_SHOT_SETTINGS_SOURCES ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES})
+
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    if(NOT X11_Xfixes_FOUND)
+        message(FATAL_ERROR
+            "XFixes is required for Linux capture and global shortcuts. Install libxfixes-dev.")
+    endif()
+    add_library(snow_shot_linux_x11 STATIC
+        include/snow_shot/platform/linux/x11connection.h
+        src/platform/linux/x11connection.cpp
+        include/snow_shot/platform/linux/x11grabkey.h
+        src/platform/linux/x11grabkey.cpp
+        include/snow_shot/platform/linux/x11cursor.h
+        src/platform/linux/x11cursor.cpp
+        include/snow_shot/platform/linux/x11windowquery.h
+        src/platform/linux/x11windowquery.cpp)
+    target_include_directories(snow_shot_linux_x11
+        PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_include_directories(snow_shot_linux_x11
+        SYSTEM PUBLIC "${X11_INCLUDE_DIR}")
+    target_link_libraries(snow_shot_linux_x11 PUBLIC Qt6::Gui X11::X11 X11::Xfixes)
+endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/components/screenshothistorypagewidget.cpp"
      _snow_shot_history_source)
 string(FIND "${_snow_shot_history_source}" "QThreadPool::globalInstance()"
@@ -11632,6 +11654,16 @@ if(SNOW_SHOT_BUILD_TESTS)
             LABELS unit TIMEOUT 30
             ENVIRONMENT "${_snow_linux_capture_qpa_environment}")
         unset(_snow_linux_capture_qpa_environment)
+        add_executable(snow-shot-linux-x11-logic-tests tests/linux_x11_logic_tests.cpp)
+        target_link_libraries(snow-shot-linux-x11-logic-tests
+            PRIVATE snow_shot_linux_x11 Qt6::Gui)
+        snow_shot_offscreen_qpa_environment(_snow_linux_x11_logic_qpa_environment)
+        add_test(NAME snow-shot-linux-x11-logic-tests
+            COMMAND snow-shot-linux-x11-logic-tests -platform offscreen)
+        set_tests_properties(snow-shot-linux-x11-logic-tests PROPERTIES
+            LABELS unit TIMEOUT 30
+            ENVIRONMENT "${_snow_linux_x11_logic_qpa_environment}")
+        unset(_snow_linux_x11_logic_qpa_environment)
     endif()
     add_executable(snow-shot-feature-action-router-tests tests/feature_action_router_tests.cpp
         src/app/featureavailability.cpp)
