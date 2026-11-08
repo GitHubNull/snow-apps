@@ -1021,6 +1021,16 @@ elseif(APPLE)
     list(APPEND SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES
         src/platform/macos/globalshortcutbackend.cpp
         src/platform/macos/focusedfullscreenwindow.mm)
+elseif(UNIX)
+    list(APPEND SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES
+        include/snow_shot/platform/linux/x11connection.h
+        include/snow_shot/platform/linux/x11grabkey.h
+        src/platform/linux/globalshortcutbackend_p.h
+        src/platform/linux/globalshortcutbackend.cpp)
+    # The backend includes the X11 headers whose None/True/False/Status macros
+    # would poison every file sharing its unity translation unit.
+    set_source_files_properties(src/platform/linux/globalshortcutbackend.cpp
+        PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 list(APPEND SNOW_SHOT_SETTINGS_SOURCES ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES})
 
@@ -1225,6 +1235,11 @@ target_compile_definitions(snow_shot_settings PRIVATE
     SNOW_SHOT_QQ_GROUP_3_URL="${SNOW_SHOT_QQ_GROUP_3_URL}"
 )
 target_link_libraries(snow_shot_settings PRIVATE snow_shot_image_codec Qt6::Svg Qt6::Network snow_shot_administrator)
+if(UNIX AND NOT APPLE)
+    # The shortcut backend sources in SNOW_SHOT_SETTINGS_SOURCES pull in the
+    # X11 helpers; keep the link transitive to the final executables.
+    target_link_libraries(snow_shot_settings PUBLIC snow_shot_linux_x11)
+endif()
 add_library(snow_shot_global_mouse STATIC
     include/snow_shot/presentation/globalmousemanager.h
     include/snow_shot/presentation/globalmousegesture.h
@@ -2405,17 +2420,23 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-recognition-image-tests -platform offscreen)
     set_tests_properties(snow-shot-recognition-image-tests PROPERTIES LABELS "unit" TIMEOUT 60)
 
-    if(WIN32 OR APPLE)
+    if(WIN32 OR APPLE OR (UNIX AND NOT APPLE))
         if(APPLE)
             set(_snow_shot_shortcut_platform_label macos)
-        else()
+        elseif(WIN32)
             set(_snow_shot_shortcut_platform_label windows)
+        else()
+            set(_snow_shot_shortcut_platform_label linux)
         endif()
         add_executable(snow-shot-global-shortcut-manager-tests
             tests/global_shortcut_manager_tests.cpp
             ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES})
         target_link_libraries(snow-shot-global-shortcut-manager-tests PRIVATE
             snow_shot_global_mouse Qt6::Widgets)
+        if(UNIX AND NOT APPLE)
+            target_link_libraries(snow-shot-global-shortcut-manager-tests PRIVATE
+                snow_shot_linux_x11)
+        endif()
         add_test(NAME snow-shot-global-shortcut-manager-tests
             COMMAND snow-shot-global-shortcut-manager-tests)
 
@@ -2453,6 +2474,9 @@ if(SNOW_SHOT_BUILD_TESTS)
         ${SNOW_SHOT_GLOBAL_SHORTCUT_SOURCES}
         src/presentation/capture/screenshotglobalmousedrag.cpp)
     target_link_libraries(snow-shot-global-mouse-tests PRIVATE snow_shot_global_mouse Qt6::Widgets)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(snow-shot-global-mouse-tests PRIVATE snow_shot_linux_x11)
+    endif()
     if(APPLE)
         target_link_libraries(snow-shot-global-mouse-tests PRIVATE
             "${SNOW_SHOT_CARBON_FRAMEWORK}"
@@ -3915,6 +3939,9 @@ if(SNOW_SHOT_BUILD_TESTS)
     target_include_directories(snow-shot-window-group-switcher-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include" "${SNOW_SHOT_DRAW_ENGINE_QT_DIR}/include")
     target_link_libraries(snow-shot-window-group-switcher-tests PRIVATE snow_shot_global_mouse ant_design_qt Qt6::Widgets)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(snow-shot-window-group-switcher-tests PRIVATE snow_shot_linux_x11)
+    endif()
     if(APPLE)
         set_source_files_properties(tests/window_group_switcher_tests.cpp PROPERTIES LANGUAGE OBJCXX)
         target_link_libraries(snow-shot-window-group-switcher-tests PRIVATE

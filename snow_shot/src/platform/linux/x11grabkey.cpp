@@ -79,6 +79,8 @@ std::optional<QString> keysymNameForQtKey(int qtKey, bool keypad) {
         return QString(QChar::fromLatin1(static_cast<char>('a' + (qtKey - Qt::Key_A))));
     }
     if (keypad) {
+        // Keypad chords map only to their KP_* keysyms; X11 has no keypad
+        // variants of function or navigation keys.
         if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
             return QStringLiteral("KP_%1").arg(qtKey - Qt::Key_0);
         }
@@ -96,12 +98,13 @@ std::optional<QString> keysymNameForQtKey(int qtKey, bool keypad) {
         case Qt::Key_Enter:
             return QStringLiteral("KP_Enter");
         default:
-            break;
+            return std::nullopt;
         }
-    } else if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
+    }
+    if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
         return QString(QChar::fromLatin1(static_cast<char>('0' + (qtKey - Qt::Key_0))));
     }
-    if (qtKey >= Qt::Key_F1 && qtKey <= Qt::Key_F35) {
+    if (qtKey >= Qt::Key_F1 && qtKey <= Qt::Key_F24) {
         return QStringLiteral("F%1").arg(qtKey - Qt::Key_F1 + 1);
     }
     switch (qtKey) {
@@ -254,6 +257,21 @@ std::optional<QString> keysymNameForQtKey(int qtKey, bool keypad) {
     default:
         return std::nullopt;
     }
+}
+
+bool isMappableShortcut(const QString& portableText) {
+    const QKeySequence sequence =
+        QKeySequence::fromString(portableText, QKeySequence::PortableText);
+    if (sequence.count() != 1) {
+        return false;
+    }
+    const QKeyCombination combination = sequence[0];
+    const int qtKey = combination.key();
+    if (qtKey == Qt::Key_unknown || isModifierOnlyKey(qtKey)) {
+        return false;
+    }
+    return keysymNameForQtKey(qtKey, combination.keyboardModifiers().testFlag(Qt::KeypadModifier))
+        .has_value();
 }
 
 std::optional<NativeKeyGrab> resolveNativeKeyGrab(const QString& portableText, _XDisplay* display) {

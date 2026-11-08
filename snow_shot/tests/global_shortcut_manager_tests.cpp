@@ -21,6 +21,10 @@
 #include <windows.h>
 #include <dwmapi.h>
 #include "../src/platform/windows/globalshortcutbackend_p.h"
+#elif defined(Q_OS_LINUX)
+#include "../src/platform/linux/globalshortcutbackend_p.h"
+#include "snow_shot/platform/linux/x11connection.h"
+#include "snow_shot/platform/linux/x11grabkey.h"
 #endif
 
 #include <array>
@@ -28,6 +32,15 @@
 #include <cstdlib>
 #include <iostream>
 #include <utility>
+
+#if defined(Q_OS_LINUX)
+// X11 headers must come after every Qt header; Xlib's Bool/Status macros
+// would otherwise corrupt the Qt declarations above.
+#include <X11/Xlib.h>
+#undef None
+#undef True
+#undef False
+#endif
 
 namespace {
 using namespace snow_shot::presentation;
@@ -1853,6 +1866,15 @@ void macOSSystemReservationChangesReconcileLiveBindings() {
 }
 #endif
 
+bool nativeProbeGrabConflict = false;
+
+int probeGrabErrorHandler(Display*, XErrorEvent* error) {
+    if (error->error_code == BadAccess) {
+        nativeProbeGrabConflict = true;
+    }
+    return 0;
+}
+
 void nativeRegistrationProbe() {
 #ifdef Q_OS_MACOS
     bool focusedFullscreen = false;
@@ -1966,6 +1988,114 @@ void nativeRegistrationProbe() {
         require(store.setValue(suppressionKey, previousSuppression),
                 "restore native fullscreen suppression preference");
     }
+#elif defined(Q_OS_LINUX)
+    namespace x11 = snow_shot::platform::x11;
+    x11::installX11ErrorHandlers();
+    Display* connection = XOpenDisplay(nullptr);
+    if (connection == nullptr) {
+        std::cout << "Linux native lifecycle probe skipped: no X display\n";
+        return;
+    }
+    bool focusedFullscreen = false;
+    GlobalShortcutManager manager(nullptr, nullptr,
+                                  [&focusedFullscreen] { return focusedFullscreen; });
+    manager.initialize();
+    clearAll(manager);
+    // Pick an F-key the current keymap maps to a keycode and that a direct
+    // grab can claim (nothing else owns the same keycode+modifier set).
+    QString probeBinding;
+    x11::NativeKeyGrab probeGrab;
+    for (int functionKey = 23; functionKey >= 1 && probeBinding.isEmpty(); --functionKey) {
+        const QString candidate = QStringLiteral("Ctrl+Shift+F%1").arg(functionKey);
+        const auto grab = x11::resolveNativeKeyGrab(candidate, connection);
+        if (!grab.has_value()) {
+            continue;
+        }
+        bool conflict = false;
+        nativeProbeGrabConflict = false;
+        const auto previousHandler = XSetErrorHandler(probeGrabErrorHandler);
+        for (const unsigned int combination : x11::lockMaskCombinations()) {
+            XGrabKey(connection, static_cast<int>(grab->keycode), grab->modifiers | combination,
+                     DefaultRootWindow(connection), true, GrabModeAsync, GrabModeAsync);
+        }
+        XSync(connection, false);
+        XSetErrorHandler(previousHandler);
+        conflict = nativeProbeGrabConflict;
+        if (conflict) {
+            for (const unsigned int combination : x11::lockMaskCombinations()) {
+                XUngrabKey(connection, static_cast<int>(grab->keycode),
+                           grab->modifiers | combination, DefaultRootWindow(connection));
+            }
+            XSync(connection, false);
+            continue;
+        }
+        probeBinding = candidate;
+        probeGrab = *grab;
+    }
+    if (probeBinding.isEmpty()) {
+        std::cout << "Linux native lifecycle probe skipped: no claimable function key\n";
+        XCloseDisplay(connection);
+        return;
+    }
+    const auto grabProbe = [&](bool grab) {
+        nativeProbeGrabConflict = false;
+        const auto previousHandler = XSetErrorHandler(probeGrabErrorHandler);
+        for (const unsigned int combination : x11::lockMaskCombinations()) {
+            if (grab) {
+                XGrabKey(connection, static_cast<int>(probeGrab.keycode),
+                         probeGrab.modifiers | combination, DefaultRootWindow(connection), true,
+                         GrabModeAsync, GrabModeAsync);
+            } else {
+                XUngrabKey(connection, static_cast<int>(probeGrab.keycode),
+                           probeGrab.modifiers | combination, DefaultRootWindow(connection));
+            }
+        }
+        XSync(connection, false);
+        XSetErrorHandler(previousHandler);
+        return !nativeProbeGrabConflict;
+    };
+    require(grabProbe(true), "the probe must own its claimed shortcut");
+    require(manager.setShortcuts(GlobalShortcutAction::Screenshot, {probeBinding}),
+            "persist Linux native probe binding");
+    const auto result = manager.state(GlobalShortcutAction::Screenshot).bindings.first();
+    require(!result.registered &&
+                result.failureReason == GlobalShortcutFailureReason::AlreadyInUse &&
+                result.nativeErrorCode == static_cast<qint64>(kX11BadAccess),
+            "X11 BadAccess conflict must be reported as an occupied shortcut");
+    grabProbe(false);
+    require(manager.setShortcuts(GlobalShortcutAction::Screenshot, {}) &&
+                manager.setShortcuts(GlobalShortcutAction::Screenshot, {probeBinding}) &&
+                manager.state(GlobalShortcutAction::Screenshot).status ==
+                    GlobalShortcutStatus::Registered,
+            "Linux binding must recover after releasing a conflicting native owner");
+    for (const bool fullscreenSuppression : {false, true}) {
+        auto& store = snow_shot::storage::ApplicationStorage::instance().configuration();
+        const QString suppressionKey =
+            QStringLiteral("global_shortcuts/disable_on_focused_fullscreen_window");
+        const auto previousSuppression = store.value(suppressionKey);
+        if (fullscreenSuppression) {
+            require(store.setValue(suppressionKey, true), "enable native fullscreen suppression");
+            focusedFullscreen = true;
+            manager.refreshFocusedFullscreenState();
+        } else {
+            manager.setGlobalHotkeysEnabled(false);
+        }
+        require(grabProbe(true),
+                "disabled Linux shortcuts must be claimable by another native owner");
+        grabProbe(false);
+        if (fullscreenSuppression) {
+            focusedFullscreen = false;
+            manager.refreshFocusedFullscreenState();
+        } else {
+            manager.setGlobalHotkeysEnabled(true);
+        }
+        require(manager.state(GlobalShortcutAction::Screenshot).status ==
+                    GlobalShortcutStatus::Registered,
+                "Linux shortcuts must reacquire ownership when their gate reopens");
+        require(store.setValue(suppressionKey, previousSuppression),
+                "restore native fullscreen suppression preference");
+    }
+    XCloseDisplay(connection);
 #endif
 }
 } // namespace

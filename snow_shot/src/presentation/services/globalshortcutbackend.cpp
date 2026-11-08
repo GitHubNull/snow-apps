@@ -1,5 +1,7 @@
 #include "globalshortcutbackend_p.h"
 
+#include <QGuiApplication>
+
 namespace snow_shot::presentation {
 namespace {
 
@@ -30,6 +32,20 @@ class UnsupportedGlobalShortcutBackend final : public GlobalShortcutBackend {
     void unregisterShortcut(int) override {}
 };
 
+#if defined(Q_OS_LINUX)
+// XGrabKey only works against an X server. On a Wayland session (including
+// QCoreApplication-only test processes without a platform integration, checked
+// through the session environment) the backend must report the platform as
+// unsupported instead of grabbing on XWayland's display.
+bool linuxSessionIsWayland() {
+    if (QGuiApplication::instance() != nullptr) {
+        return QGuiApplication::platformName() == QStringLiteral("wayland");
+    }
+    return !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") &&
+           qEnvironmentVariableIsEmpty("DISPLAY");
+}
+#endif
+
 } // namespace
 
 std::unique_ptr<GlobalShortcutBackend> createPlatformGlobalShortcutBackend() {
@@ -37,6 +53,11 @@ std::unique_ptr<GlobalShortcutBackend> createPlatformGlobalShortcutBackend() {
     return createWindowsGlobalShortcutBackend();
 #elif defined(Q_OS_MACOS)
     return createMacOSGlobalShortcutBackend();
+#elif defined(Q_OS_LINUX)
+    if (linuxSessionIsWayland()) {
+        return std::make_unique<UnsupportedGlobalShortcutBackend>();
+    }
+    return createLinuxGlobalShortcutBackend();
 #else
     return std::make_unique<UnsupportedGlobalShortcutBackend>();
 #endif
