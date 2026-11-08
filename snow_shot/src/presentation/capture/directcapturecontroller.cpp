@@ -31,6 +31,14 @@
 #include <windows.h>
 #endif
 
+#if defined(Q_OS_LINUX)
+#include "directcaptureqtx11.h"
+#include "snow_shot/platform/linux/x11windowquery.h"
+#include "snow_shot/presentation/capture/screenshotqtcaptureprovider.h"
+
+#include <QCursor>
+#endif
+
 namespace snow_shot::presentation {
 namespace {
 
@@ -48,7 +56,13 @@ class DirectCaptureController::Impl {
                   artifact.reset();
                   emit owner.captureActivityChanged(QStringLiteral("direct"), true);
                   const bool queued = submit<DirectCaptureFrame>(
-                      [request]() { return captureDirectTarget(request); },
+                      [request]() {
+#if defined(Q_OS_LINUX)
+                          return captureDirectTargetQt(request);
+#else
+                          return captureDirectTarget(request);
+#endif
+                      },
                       [this, request, done = std::move(done)](DirectCaptureFrame frame) mutable {
                           emit owner.captureActivityChanged(QStringLiteral("direct"), false);
                           if (frame.isValid()) {
@@ -279,6 +293,10 @@ void DirectCaptureController::captureFocusedWindow() {
         const HWND root = GetAncestor(target, GA_ROOT);
         request.window = reinterpret_cast<quintptr>(root != nullptr ? root : target);
     }
+#elif defined(Q_OS_LINUX)
+    if (const auto active = snow_shot::platform::x11::activeWindowId()) {
+        request.window = static_cast<quintptr>(*active);
+    }
 #endif
 #ifdef Q_OS_MACOS
     request.window = platform::screenshotFocusedWindow();
@@ -296,6 +314,8 @@ void DirectCaptureController::captureCurrentMonitor() {
                                                  reinterpret_cast<MONITORINFO*>(&info))) {
         request.monitorName = QString::fromWCharArray(info.szDevice);
     }
+#elif defined(Q_OS_LINUX)
+    request.monitorName = ScreenshotQtCaptureProvider::displayStableIdAt(QCursor::pos());
 #endif
 #ifdef Q_OS_MACOS
     const quint32 id = platform::screenshotDisplayAtCursor();
@@ -347,6 +367,14 @@ bool DirectCaptureController::mcpCapture(
     else
         request.monitorName =
             QStringLiteral("display:%1").arg(platform::screenshotDisplayAtCursor());
+#elif defined(Q_OS_LINUX)
+    if (request.target == DirectCaptureTarget::FocusedWindow) {
+        if (const auto active = snow_shot::platform::x11::activeWindowId()) {
+            request.window = static_cast<quintptr>(*active);
+        }
+    } else {
+        request.monitorName = ScreenshotQtCaptureProvider::displayStableIdAt(QCursor::pos());
+    }
 #endif
     if (target == QStringLiteral("monitor")) {
         request.monitorName = options.value(QStringLiteral("monitor_id")).toString();
@@ -374,7 +402,11 @@ bool DirectCaptureController::mcpCapture(
         [request, scale, cancellation] {
             if (cancellation->load(std::memory_order_acquire))
                 return DirectCaptureFrame{};
+#if defined(Q_OS_LINUX)
+            auto frame = captureDirectTargetQt(request);
+#else
             auto frame = captureDirectTarget(request);
+#endif
             if (cancellation->load(std::memory_order_acquire))
                 return DirectCaptureFrame{};
             if (!frame.image.isNull() && scale != 1) {

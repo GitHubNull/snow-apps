@@ -91,6 +91,27 @@ std::optional<WindowId> frameWindowIdFor(WindowId windowId) {
     return std::nullopt;
 }
 
+std::optional<QRect> windowGlobalGeometry(WindowId windowId) {
+    X11Connection connection;
+    if (!connection.isValid() || windowId == 0) {
+        return std::nullopt;
+    }
+    Display* display = connection.display();
+    const Window window = static_cast<Window>(windowId);
+    XWindowAttributes attributes{};
+    if (!XGetWindowAttributes(display, window, &attributes)) {
+        return std::nullopt;
+    }
+    int rootX = 0;
+    int rootY = 0;
+    Window child = None;
+    if (!XTranslateCoordinates(display, window, attributes.root, 0, 0, &rootX, &rootY, &child)) {
+        return std::nullopt;
+    }
+    return QRect(rootX, rootY, static_cast<int>(attributes.width),
+                 static_cast<int>(attributes.height));
+}
+
 bool windowsAreUnviewable(const QVector<WindowId>& windowIds) {
     X11Connection connection;
     if (!connection.isValid()) {

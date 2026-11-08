@@ -55,6 +55,9 @@ typedef enum SnowCaptureBackendKind {
     SNOW_CAPTURE_BACKEND_WGC = 2,
     SNOW_CAPTURE_BACKEND_GDI = 3,
     SNOW_CAPTURE_BACKEND_SCREEN_CAPTURE_KIT = 4,
+    /* Produced by the Linux Qt/X11 capture path; never emitted by the Rust
+       backends. */
+    SNOW_CAPTURE_BACKEND_X11_QT = 5,
 } SnowCaptureBackendKind;
 
 typedef enum SnowCaptureWgcUpdateMode {

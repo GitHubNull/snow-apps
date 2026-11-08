@@ -59,6 +59,7 @@
     "ScreenshotController",
     "ScreenshotMcpServer",
     "ScreenshotOverlayWindow",
+    "ScreenshotQtCaptureProvider",
     "ScreenshotRegionTypeControl",
     "ScreenshotSelectionResizeModalContent",
     "ScreenshotSelectionResizeWorkflow",
@@ -67,7 +68,8 @@
     "SnowImageQtCodec",
     "snow_shot::app::mcp::ScreenshotMcpServer",
     "snow_shot::app::mcp::ScreenshotMcpSession",
-    "snow_shot::presentation::DirectCaptureController"
+    "snow_shot::presentation::DirectCaptureController",
+    "snow_shot::presentation::capture::ScreenshotQtCaptureProvider"
   ],
   "annotation": [
     "snow_shot::presentation::GlobalCanvasController",

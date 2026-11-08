@@ -70,6 +70,22 @@ QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::layoutDisplays() {
     return displays;
 }
 
+QString ScreenshotQtCaptureProvider::displayStableIdAt(const QPoint& position) {
+    const QVector<QScreen*> screens = captureScreens();
+    QSet<QString> usedIds;
+    QString matched;
+    // Stable ids are index-order dependent, so the dedupe set must observe
+    // every screen even after the match is found.
+    for (qsizetype index = 0; index < screens.size(); ++index) {
+        QScreen* screen = screens.at(index);
+        const QString stableId = qtcapture::displayStableId(screen->name(), index, &usedIds);
+        if (screen->geometry().contains(position)) {
+            matched = stableId;
+        }
+    }
+    return matched;
+}
+
 QVector<CapturedDisplayModel> ScreenshotQtCaptureProvider::captureDisplays(QString* errorMessage) {
     if (errorMessage != nullptr) {
         errorMessage->clear();

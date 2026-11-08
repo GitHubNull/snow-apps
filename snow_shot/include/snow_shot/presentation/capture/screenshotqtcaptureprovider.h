@@ -4,6 +4,7 @@
 #include "snow_shot/presentation/screenshottypes.h"
 
 #include <QCoreApplication>
+#include <QPoint>
 #include <QString>
 #include <QVector>
 
@@ -20,6 +21,11 @@ class ScreenshotQtCaptureProvider {
     // Grabs one frame per display. Returns an empty vector and sets errorMessage
     // when no complete frame set can be acquired.
     [[nodiscard]] static QVector<CapturedDisplayModel> captureDisplays(QString* errorMessage);
+
+    // Stable display id of the screen containing the global position, computed
+    // with the same ordering and dedupe rules as layoutDisplays(). Empty when
+    // no screen contains the position. GUI thread only.
+    [[nodiscard]] static QString displayStableIdAt(const QPoint& position);
 };
 
 #endif // SNOW_SHOT_PRESENTATION_CAPTURE_SCREENSHOTQTCAPTUREPROVIDER_H

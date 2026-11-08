@@ -4,8 +4,20 @@
     <context>
         <name>DirectCaptureController</name>
         <message>
+            <source>No active window is available to capture</source>
+            <translation>没有可截取的活动窗口</translation>
+        </message>
+        <message>
+            <source>No screens are available for capture</source>
+            <translation>没有可用于截取的屏幕</translation>
+        </message>
+        <message>
             <source>The capture operation could not be queued</source>
             <translation>无法将捕获操作加入队列</translation>
+        </message>
+        <message>
+            <source>The capture request timed out</source>
+            <translation>截屏请求已超时</translation>
         </message>
         <message>
             <source>The capture returned an invalid image</source>
@@ -18,6 +30,10 @@
         <message>
             <source>The captured window geometry is invalid</source>
             <translation>捕获的窗口几何信息无效</translation>
+        </message>
+        <message>
+            <source>The focused window is no longer visible</source>
+            <translation>聚焦窗口已不可见</translation>
         </message>
     </context>
     <context>
@@ -249,6 +265,17 @@
         <message>
             <source>Unable to open the recognized link</source>
             <translation>无法打开识别出的链接</translation>
+        </message>
+    </context>
+    <context>
+        <name>ScreenshotQtCaptureProvider</name>
+        <message>
+            <source>Failed to capture the X11 screen contents</source>
+            <translation>截取 X11 屏幕内容失败</translation>
+        </message>
+        <message>
+            <source>No screens are available for capture</source>
+            <translation>没有可用于截取的屏幕</translation>
         </message>
     </context>
     <context>

@@ -35,8 +35,14 @@ struct NativeKeyGrab {
 
 // Maps a Qt key to the registered X11 keysym name. Keypad keys resolve to
 // their KP_* keysyms when the keypad flag is set; keys without a stable X11
-// keysym name return nullopt.
+// keysym name return nullopt. Function keys cap at F24 to match the Windows
+// and macOS backends.
 [[nodiscard]] std::optional<QString> keysymNameForQtKey(int qtKey, bool keypad);
+
+// Reports whether a portable shortcut text parses into a single non-modifier
+// chord whose key maps to an X11 keysym. Pure text check: it does not touch
+// the display or the keyboard layout, so validation works without X.
+[[nodiscard]] bool isMappableShortcut(const QString& portableText);
 
 // Resolves a portable shortcut text such as "Ctrl+Alt+A" into the keycode and
 // base modifier mask to grab on the given display. Character keysyms that are
