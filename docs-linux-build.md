@@ -37,8 +37,8 @@ array with `apt-get` through `sudo`. `bash scripts/bootstrap-linux.sh
 part of this step.
 
 Python tooling is isolated in the repository-local uv virtual environment at
-`.tools/venv`. Do not install `cmake`, `ninja`, `aqtinstall`, or `clang-format`
-into the global Python environment; the bootstrap script never does.
+`.tools/venv`. Do not install `cmake`, `ninja`, `aqtinstall`, `clang-format`, or
+`libclang` into the global Python environment; the bootstrap script never does.
 
 The desktop applications require an X11 session and OpenGL 3.3 or newer. A
 compositor is recommended but not required.
@@ -52,7 +52,8 @@ bash scripts/bootstrap-linux.sh
 The script:
 
 1. creates `.tools/venv` with `uv venv` and installs `cmake` (4.2 or newer),
-   `ninja`, `aqtinstall`, and `clang-format` with
+   `ninja`, `aqtinstall`, `clang-format`, and the pinned `libclang` 18.1.1 (used
+   by Rust bindgen when no system libclang exists) with
    `uv pip install --python .tools/venv/bin/python`;
 2. installs Qt 6.12.0 for `linux_gcc_64` into `.tools/Qt` with the venv's `aqt`
    (the Qt 6.12 base package already contains Qt Svg, Qt Tools/LinguistTools, and
