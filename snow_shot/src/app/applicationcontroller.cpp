@@ -2196,6 +2196,13 @@ class ApplicationController::Impl {
     }
 
     QString unavailableFeatureMessage(FeatureFamily feature) const {
+#if defined(Q_OS_LINUX)
+        if (feature == FeatureFamily::Screenshot && captureBlockedByWaylandSession()) {
+            return ApplicationController::tr(
+                "Screen capture needs an X11 session. Wayland is not supported yet; "
+                "start the app with QT_QPA_PLATFORM=xcb to run through XWayland.");
+        }
+#endif
         Q_UNUSED(feature);
         return {};
     }

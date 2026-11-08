@@ -2,6 +2,7 @@
 #include "snow_shot/platform/applicationqos.h"
 #include "snow_shot/app/applicationcontroller.h"
 #include "snow_shot/app/applicationrestart.h"
+#include "snow_shot/app/featureavailability.h"
 #include <QTemporaryDir>
 #include <QProcess>
 #include <QLocalServer>
@@ -760,6 +761,17 @@ int main(int argc, char* argv[]) {
             });
 #endif
         }
+#if defined(Q_OS_LINUX)
+        if (snow_shot::app::captureBlockedByWaylandSession()) {
+            QTimer::singleShot(0, &app, [] {
+                adqt::widgets::AdMessage::Request request;
+                request.content = snow_shot::app::ApplicationController::tr(
+                    "Screen capture needs an X11 session. Wayland is not supported yet; "
+                    "start the app with QT_QPA_PLATFORM=xcb to run through XWayland.");
+                adqt::widgets::AdMessageService::warning(std::move(request));
+            });
+        }
+#endif
     });
     QTimer::singleShot(0, &app, [&] {
         singleInstance.setLaunchRequestHandler(

@@ -901,6 +901,10 @@ so every moment on screen can be expressed clearly and shared easily.</translati
             <translation>Restart failed</translation>
         </message>
         <message>
+            <source>Screen capture needs an X11 session. Wayland is not supported yet; start the app with QT_QPA_PLATFORM=xcb to run through XWayland.</source>
+            <translation>Screen capture needs an X11 session. Wayland is not supported yet; start the app with QT_QPA_PLATFORM=xcb to run through XWayland.</translation>
+        </message>
+        <message>
             <source>Snow Shot %1 is available. Open About for update options.</source>
             <translation>Snow Shot %1 is available. Open About for update options.</translation>
         </message>

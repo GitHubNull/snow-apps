@@ -1,8 +1,22 @@
 #include "snow_shot/app/featureavailability.h"
 
+#include <QCoreApplication>
+#include <QGuiApplication>
+
 #include <utility>
 
 namespace snow_shot::app {
+
+#if defined(Q_OS_LINUX)
+// Qt's Wayland platform cannot grab screens; only the literal Wayland QPA
+// blocks capture, so offscreen test integrations keep working.
+bool captureBlockedByWaylandSession() {
+    const QCoreApplication* instance = QCoreApplication::instance();
+    return instance != nullptr && instance->inherits("QGuiApplication") &&
+           QGuiApplication::platformName() == QStringLiteral("wayland");
+}
+#endif
+
 std::optional<FeatureFamily> featureFamilyFor(presentation::GlobalShortcutAction action) {
     using Action = presentation::GlobalShortcutAction;
     switch (action) {
@@ -63,8 +77,15 @@ FeatureFamily featureFamilyFor(presentation::settings::SettingsGlobalMouseAction
 
 bool isFeatureAvailable(FeatureFamily feature) {
 #if defined(Q_OS_LINUX)
-    // The Linux build has no native screen-recording backend.
-    return feature != FeatureFamily::ScreenRecording;
+    // The Linux build has no native screen-recording backend, and screen
+    // capture requires an X11 session.
+    if (feature == FeatureFamily::ScreenRecording) {
+        return false;
+    }
+    if (feature == FeatureFamily::Screenshot && captureBlockedByWaylandSession()) {
+        return false;
+    }
+    return true;
 #else
     (void)feature;
     return true;

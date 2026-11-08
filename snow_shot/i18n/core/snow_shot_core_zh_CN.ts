@@ -901,6 +901,10 @@ so every moment on screen can be expressed clearly and shared easily.</source>
             <translation>重启失败</translation>
         </message>
         <message>
+            <source>Screen capture needs an X11 session. Wayland is not supported yet; start the app with QT_QPA_PLATFORM=xcb to run through XWayland.</source>
+            <translation>屏幕截取需要 X11 会话。尚不支持 Wayland；请以 QT_QPA_PLATFORM=xcb 启动应用以通过 XWayland 运行。</translation>
+        </message>
+        <message>
             <source>Snow Shot %1 is available. Open About for update options.</source>
             <translation>Snow Shot %1 已推出。打开“关于”查看更新选项。</translation>
         </message>

@@ -15,6 +15,11 @@ featureFamilyFor(presentation::GlobalShortcutAction action);
 [[nodiscard]] FeatureFamily
 featureFamilyFor(presentation::settings::SettingsGlobalMouseAction action);
 [[nodiscard]] bool isFeatureAvailable(FeatureFamily feature);
+#if defined(Q_OS_LINUX)
+// True when the app runs under the Wayland QPA, whose screens cannot be
+// grabbed. Only Wayland qualifies; offscreen integrations stay capturable.
+[[nodiscard]] bool captureBlockedByWaylandSession();
+#endif
 
 class FeatureGate final {
   public:
