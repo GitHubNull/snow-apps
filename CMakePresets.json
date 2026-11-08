@@ -513,6 +513,18 @@
       "cacheVariables": {
         "SNOW_APPS_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux GCC Release (desktop apps)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SNOW_APPS_STRICT_COMPILE": "ON",
+        "SNOW_APPS_BUILD_TESTS": "OFF",
+        "SNOW_APPS_BUILD_BENCHMARKS": "OFF",
+        "SNOW_APPS_API_BASE_URL": "https://snowshot.top"
+      }
     }
   ],
   "buildPresets": [
@@ -685,6 +697,13 @@
       "configurePreset": "linux-debug-tests",
       "targets": [
         "snow-shot-linux-capture-geometry-tests"
+      ]
+    },
+    {
+      "name": "build-linux-release",
+      "configurePreset": "linux-release",
+      "targets": [
+        "snow-all"
       ]
     }
   ],

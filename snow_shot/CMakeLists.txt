@@ -11235,6 +11235,29 @@ install(FILES
     DESTINATION "${CMAKE_INSTALL_BINDIR}/assets/qrcode"
 )
 
+if(UNIX AND NOT APPLE)
+    # The install tree places the codec backend and the deployed Qt runtime in
+    # lib/, so origin-relative runpaths keep a relocated prefix bootable
+    # without LD_LIBRARY_PATH.
+    set_target_properties(snow_shot PROPERTIES INSTALL_RPATH "$ORIGIN/../lib")
+    if(TARGET snow_shot_image_codec_backend)
+        set_target_properties(snow_shot_image_codec_backend
+            PROPERTIES INSTALL_RPATH "$ORIGIN")
+    endif()
+
+    install(FILES packaging/linux/snow-shot.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+    )
+    install(FILES resources/app-icon.svg
+        RENAME snow-shot.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
+    )
+    install(FILES packaging/msix/Assets/Square44x44Logo.targetsize-256_altform-unplated.png
+        RENAME snow-shot.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+    )
+endif()
+
 if(WIN32 AND NOT SNOW_SHOT_RELEASE_STATIC)
     snow_shot_stage_ffmpeg_runtime(snow_shot)
     if(SNOW_SHOT_FFMPEG_RUNTIME_FILES)
@@ -11275,7 +11298,90 @@ if(WIN32 AND NOT SNOW_SHOT_QT_STATIC)
     )
     install(SCRIPT "${SNOW_SHOT_QT_DEPLOY_SCRIPT}")
 
-    # Qt's deployment helper copies every Qt base translation catalog. Snow
+    # windeployqt deploys optional Qt plugins based on broad module metadata.
+    # Snow Shot only needs the Windows platform integration and the Schannel
+    # TLS backend at runtime. Remove optional image, style, input,
+    # network-information, icon-engine, and certificate-only backends.
+    install(CODE [=[
+        set(_snow_shot_qt_plugin_dir
+            "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/plugins")
+        set(_snow_shot_allowed_qt_plugins
+            platforms/qwindows.dll
+            tls/qschannelbackend.dll
+        )
+        if(IS_DIRECTORY "${_snow_shot_qt_plugin_dir}")
+            file(GLOB_RECURSE _snow_shot_qt_plugin_files
+                RELATIVE "${_snow_shot_qt_plugin_dir}"
+                "${_snow_shot_qt_plugin_dir}/*.dll")
+            foreach(_snow_shot_qt_plugin IN LISTS _snow_shot_qt_plugin_files)
+                if(NOT _snow_shot_qt_plugin IN_LIST _snow_shot_allowed_qt_plugins)
+                    file(REMOVE "${_snow_shot_qt_plugin_dir}/${_snow_shot_qt_plugin}")
+                endif()
+            endforeach()
+        endif()
+        unset(_snow_shot_qt_plugin_dir)
+        unset(_snow_shot_allowed_qt_plugins)
+        unset(_snow_shot_qt_plugin_files)
+        unset(_snow_shot_qt_plugin)
+    ]=])
+elseif(UNIX AND NOT APPLE AND NOT SNOW_SHOT_QT_STATIC)
+    # The generic Qt deploy tool resolves the installed executable's shared
+    # libraries with file(GET_RUNTIME_DEPENDENCIES), copies the Qt runtime into
+    # lib/, writes qt.conf next to the executable, and stages the Qt plugins
+    # the linked modules may load.
+    qt_generate_deploy_app_script(
+        TARGET snow_shot
+        OUTPUT_SCRIPT SNOW_SHOT_QT_DEPLOY_SCRIPT
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT "${SNOW_SHOT_QT_DEPLOY_SCRIPT}")
+
+    # Keep only the plugins an X11/XWayland session loads: the xcb platform and
+    # its GL integrations, raster image formats, SVG icons, GTK/portal themes,
+    # input contexts, TLS backends, and network state plugins. Everything else
+    # the generic tool stages (wayland, eglfs, sql, print, virtual keyboard,
+    # evdev input) is dead weight in the install tree.
+    install(CODE [=[
+        set(_snow_shot_qt_plugin_dir
+            "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/plugins")
+        set(_snow_shot_allowed_qt_plugins
+            platforms/libqxcb.so
+            xcbglintegrations/libqxcb-egl-integration.so
+            xcbglintegrations/libqxcb-glx-integration.so
+            imageformats/libqgif.so
+            imageformats/libqico.so
+            imageformats/libqjpeg.so
+            imageformats/libqsvg.so
+            iconengines/libqsvgicon.so
+            platformthemes/libqgtk3.so
+            platformthemes/libqxdgdesktopportal.so
+            platforminputcontexts/libcomposeplatforminputcontextplugin.so
+            platforminputcontexts/libibusplatforminputcontextplugin.so
+            tls/libqcertonlybackend.so
+            tls/libqopensslbackend.so
+            networkinformation/libqconnman.so
+            networkinformation/libqglib.so
+            networkinformation/libqnetworkmanager.so
+        )
+        if(IS_DIRECTORY "${_snow_shot_qt_plugin_dir}")
+            file(GLOB_RECURSE _snow_shot_qt_plugin_files
+                RELATIVE "${_snow_shot_qt_plugin_dir}"
+                "${_snow_shot_qt_plugin_dir}/*.so*")
+            foreach(_snow_shot_qt_plugin IN LISTS _snow_shot_qt_plugin_files)
+                if(NOT _snow_shot_qt_plugin IN_LIST _snow_shot_allowed_qt_plugins)
+                    file(REMOVE "${_snow_shot_qt_plugin_dir}/${_snow_shot_qt_plugin}")
+                endif()
+            endforeach()
+        endif()
+        unset(_snow_shot_qt_plugin_dir)
+        unset(_snow_shot_allowed_qt_plugins)
+        unset(_snow_shot_qt_plugin_files)
+        unset(_snow_shot_qt_plugin)
+    ]=])
+endif()
+
+if((WIN32 OR (UNIX AND NOT APPLE)) AND NOT SNOW_SHOT_QT_STATIC)
+    # Qt's deployment helpers copy every Qt base translation catalog. Snow
     # Shot ships only en_US, zh_CN, and zh_TW application catalogs, so retain
     # only the corresponding Qt catalogs in the final install tree.
     install(CODE [=[
@@ -11302,33 +11408,6 @@ if(WIN32 AND NOT SNOW_SHOT_QT_STATIC)
         unset(_snow_shot_qt_translation_catalogs)
         unset(_snow_shot_qt_catalog)
         unset(_snow_shot_qt_catalog_name)
-    ]=])
-
-    # windeployqt deploys optional Qt plugins based on broad module metadata.
-    # Snow Shot only needs the Windows platform integration and the Schannel
-    # TLS backend at runtime. Remove optional image, style, input,
-    # network-information, icon-engine, and certificate-only backends.
-    install(CODE [=[
-        set(_snow_shot_qt_plugin_dir
-            "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/plugins")
-        set(_snow_shot_allowed_qt_plugins
-            platforms/qwindows.dll
-            tls/qschannelbackend.dll
-        )
-        if(IS_DIRECTORY "${_snow_shot_qt_plugin_dir}")
-            file(GLOB_RECURSE _snow_shot_qt_plugin_files
-                RELATIVE "${_snow_shot_qt_plugin_dir}"
-                "${_snow_shot_qt_plugin_dir}/*.dll")
-            foreach(_snow_shot_qt_plugin IN LISTS _snow_shot_qt_plugin_files)
-                if(NOT _snow_shot_qt_plugin IN_LIST _snow_shot_allowed_qt_plugins)
-                    file(REMOVE "${_snow_shot_qt_plugin_dir}/${_snow_shot_qt_plugin}")
-                endif()
-            endforeach()
-        endif()
-        unset(_snow_shot_qt_plugin_dir)
-        unset(_snow_shot_allowed_qt_plugins)
-        unset(_snow_shot_qt_plugin_files)
-        unset(_snow_shot_qt_plugin)
     ]=])
 endif()
 

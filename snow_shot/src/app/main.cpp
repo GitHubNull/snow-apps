@@ -467,6 +467,11 @@ int main(int argc, char* argv[]) {
     // Keep it stable while giving Qt windows and the macOS menu the product name.
     QGuiApplication::setApplicationDisplayName(snow_shot::app::edition::productName());
     QApplication app(argc, argv);
+#if defined(Q_OS_LINUX)
+    // Match the installed desktop entry so Wayland compositors see the app id
+    // and launchers can associate the running window with its icon.
+    QGuiApplication::setDesktopFileName(QStringLiteral("snow-shot"));
+#endif
     // Forwarding processes need only Qt and the instance protocol. Storage probes,
     // helper processes and display discovery belong to the primary instance.
     auto launchArguments =

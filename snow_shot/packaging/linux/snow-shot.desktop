@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Snow Shot
+GenericName=Screenshot Tool
+GenericName[zh_CN]=截图工具
+GenericName[zh_TW]=截圖工具
+Comment=Capture, annotate, and share screenshots
+Comment[zh_CN]=截图、标注与分享
+Comment[zh_TW]=截圖、標註與分享
+Exec=snow_shot
+Icon=snow-shot
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+StartupWMClass=snow_shot
+Keywords=screenshot;capture;snip;annotation;
