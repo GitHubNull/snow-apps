@@ -2179,6 +2179,7 @@ elseif(UNIX)
     list(APPEND PROJECT_CXX_SOURCES
         src/platform/linux/livewindownative.cpp
         src/platform/linux/windowcaptureexclusion.cpp
+        src/platform/linux/capturewindowshield.cpp
         src/presentation/capture/directcaptureqtx11.cpp
         src/presentation/capture/screenshotqtcaptureprovider.cpp)
 endif()
@@ -11678,7 +11679,9 @@ if(SNOW_SHOT_BUILD_TESTS)
             src/presentation/capture/screenshotqtcaptureprovider.cpp
             src/presentation/core/screenshotgeometry.cpp)
         target_include_directories(snow-shot-linux-capture-geometry-tests PRIVATE include src)
-        target_link_libraries(snow-shot-linux-capture-geometry-tests PRIVATE Qt6::Gui)
+        # The provider's optional cursor sampling references the X11 helpers.
+        target_link_libraries(snow-shot-linux-capture-geometry-tests
+            PRIVATE Qt6::Gui snow_shot_linux_x11)
         snow_shot_offscreen_qpa_environment(_snow_linux_capture_qpa_environment)
         add_test(NAME snow-shot-linux-capture-geometry-tests
             COMMAND snow-shot-linux-capture-geometry-tests -platform offscreen)
@@ -11686,9 +11689,11 @@ if(SNOW_SHOT_BUILD_TESTS)
             LABELS unit TIMEOUT 30
             ENVIRONMENT "${_snow_linux_capture_qpa_environment}")
         unset(_snow_linux_capture_qpa_environment)
-        add_executable(snow-shot-linux-x11-logic-tests tests/linux_x11_logic_tests.cpp)
+        add_executable(snow-shot-linux-x11-logic-tests tests/linux_x11_logic_tests.cpp
+            src/platform/linux/capturewindowshield.cpp)
+        target_include_directories(snow-shot-linux-x11-logic-tests PRIVATE src)
         target_link_libraries(snow-shot-linux-x11-logic-tests
-            PRIVATE snow_shot_linux_x11 Qt6::Gui)
+            PRIVATE snow_shot_linux_x11 Qt6::Gui Qt6::Widgets)
         snow_shot_offscreen_qpa_environment(_snow_linux_x11_logic_qpa_environment)
         add_test(NAME snow-shot-linux-x11-logic-tests
             COMMAND snow-shot-linux-x11-logic-tests -platform offscreen)

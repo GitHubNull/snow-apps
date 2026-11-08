@@ -5,6 +5,7 @@
 #include "screenshotcaptureworker.h"
 
 #if defined(Q_OS_LINUX)
+#include "capturewindowshield.h"
 #include "snow_shot/presentation/capture/screenshotqtcaptureprovider.h"
 #include "snow_shot/storage/settingsadapters.h"
 
@@ -205,8 +206,13 @@ void ScreenshotCaptureCoordinator::finishLinuxCapture(quint64 generation,
     ScreenshotCaptureResult result;
     result.requestId = request.requestId;
     result.purpose = request.purpose;
+    // Own windows (floating toolbar, main window, pinned windows, and any
+    // already-presented overlay) must not appear in the frames.
+    const auto shieldState = snow_shot::platform::x11::concealWidgetsForCapture(
+        snow_shot::platform::x11::visibleTopLevelWidgets());
     result.displays = ScreenshotQtCaptureProvider::captureDisplays(
         &result.errorMessage, snow_shot::storage::ScreenshotSettings().showCursor());
+    snow_shot::platform::x11::restoreWidgetsAfterCapture(shieldState);
     result.succeeded = !result.displays.isEmpty();
     result.cursorAvailable = std::any_of(
         result.displays.cbegin(), result.displays.cend(),

@@ -1,6 +1,9 @@
+#include "platform/linux/capturewindowshield.h"
+#include "snow_shot/platform/linux/x11connection.h"
 #include "snow_shot/platform/linux/x11grabkey.h"
 
-#include <QGuiApplication>
+#include <QApplication>
+#include <QWidget>
 #include <iostream>
 #include <Qt>
 
@@ -82,13 +85,34 @@ void keysymNamesCoverCoreKeys() {
     require(!unmapped.has_value(), "keys without a stable keysym return nullopt");
 }
 
+void captureWindowShieldConcealsAndRestoresOwnWindows() {
+    QWidget hidden;
+    hidden.setAttribute(Qt::WA_DontShowOnScreen);
+    QWidget shown;
+    shown.setAttribute(Qt::WA_DontShowOnScreen);
+    shown.show();
+    require(snow_shot::platform::x11::visibleTopLevelWidgets().contains(&shown),
+            "shield collector lists visible windows");
+    require(!snow_shot::platform::x11::visibleTopLevelWidgets().contains(&hidden),
+            "shield collector skips hidden windows");
+
+    const auto state = snow_shot::platform::x11::concealWidgetsForCapture(
+        snow_shot::platform::x11::visibleTopLevelWidgets());
+    require(!shown.isVisible(), "concealment hides visible windows");
+    require(!state.concealed.contains(&hidden), "concealment records only widgets it hid");
+
+    snow_shot::platform::x11::restoreWidgetsAfterCapture(state);
+    require(shown.isVisible(), "restore brings back exactly the concealed windows");
+    require(!hidden.isVisible(), "restore leaves hidden windows alone");
+}
 } // namespace
 
 int main(int argc, char** argv) {
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     lockMaskCombinationsCoverAllLockStates();
     normalizeLockStateStripsLockBits();
     classifyKeyPressMatchesNormalizedState();
     keysymNamesCoverCoreKeys();
+    captureWindowShieldConcealsAndRestoresOwnWindows();
     return 0;
 }
