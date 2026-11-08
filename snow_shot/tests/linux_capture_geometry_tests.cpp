@@ -4,6 +4,8 @@
 
 #include <QGuiApplication>
 #include <QImage>
+#include <QColor>
+#include <QPainter>
 #include <QScreen>
 #include <QSet>
 
@@ -168,6 +170,59 @@ void cursorPlacementClipsAgainstDisplayBounds() {
                 negative.sourceRect == QRect(0, 0, 24, 24),
             "negative-origin display offsets cursor locally");
 }
+
+void physicalRectScalingCoversNegativeOriginsAndMixedDpi() {
+    // ScreenshotGeometryMapper lives in the global namespace.
+    using ::ScreenshotGeometryMapper;
+    // The logical origin (including negative positions) survives untouched.
+    require(ScreenshotGeometryMapper::physicalRectForGeometry(
+                QRect(-1920, -200, 1920, 1080), 1.0) == QRect(-1920, -200, 1920, 1080),
+            "unit ratio keeps the logical rectangle");
+    require(ScreenshotGeometryMapper::physicalRectForGeometry(
+                QRect(-1920, -200, 1920, 1080), 2.0) == QRect(-1920, -200, 3840, 2160),
+            "double ratio doubles only the extents");
+    // Fractional ratios round to the nearest physical pixel.
+    require(ScreenshotGeometryMapper::physicalRectForGeometry(QRect(0, 0, 967, 1080), 1.25) ==
+                QRect(0, 0, 1209, 1350),
+            "fractional ratios round the extents");
+    // Non-positive ratios fall back to the logical rectangle.
+    require(ScreenshotGeometryMapper::physicalRectForGeometry(QRect(-5, -5, 800, 600), 0.0) ==
+                QRect(-5, -5, 800, 600),
+            "non-positive ratio keeps the logical rectangle");
+}
+
+void multiScreenUnionAndCropChainKeepsGeometry() {
+    // A left display with a negative origin next to a right display: the union
+    // bounds start at the left display and each crop must land on its own
+    // half of the synthetic virtual-desktop frame.
+    const QRect left(-1920, 0, 1920, 1080);
+    const QRect right(0, 0, 1920, 1080);
+    const QRect bounds = left.united(right);
+    require(bounds == QRect(-1920, 0, 3840, 1080), "union bounds start at the left display");
+
+    QImage frame(bounds.size(), QImage::Format_RGB32);
+    frame.fill(0xFF101010);
+    {
+        QPainter painter(&frame);
+        painter.fillRect(left.translated(-bounds.topLeft()), QColor(0xF0, 0x10, 0x10));
+        painter.fillRect(right.translated(-bounds.topLeft()), QColor(0x10, 0x10, 0xF0));
+    }
+
+    const auto leftFrame = qtcapture::cropDisplayFrame(frame, bounds, left);
+    const auto rightFrame = qtcapture::cropDisplayFrame(frame, bounds, right);
+    require(leftFrame.size() == left.size() && rightFrame.size() == right.size(),
+            "both displays crop to their physical sizes");
+    require(leftFrame.pixelColor(0, 0) == QColor(0xF0, 0x10, 0x10),
+            "left crop starts at the left display");
+    require(rightFrame.pixelColor(0, 0) == QColor(0x10, 0x10, 0xF0),
+            "right crop starts at the right display");
+
+    // A mixed-DPI pair: the left display reports its extents through
+    // physicalRectForGeometry so the crop chain stays in physical pixels.
+    const QRect leftPhysical = ScreenshotGeometryMapper::physicalRectForGeometry(left, 2.0);
+    require(leftPhysical == QRect(-1920, 0, 3840, 2160),
+            "mixed-DPI display scales extents without moving its origin");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -178,6 +233,8 @@ int main(int argc, char** argv) {
     layoutMatchesScreens();
     captureMatchesLayoutIdentity();
     cursorPlacementClipsAgainstDisplayBounds();
+    physicalRectScalingCoversNegativeOriginsAndMixedDpi();
+    multiScreenUnionAndCropChainKeepsGeometry();
     std::cout << "snow shot linux capture geometry tests passed\n";
     return 0;
 }

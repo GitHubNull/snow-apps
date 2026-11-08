@@ -871,6 +871,16 @@ CapturedDisplayModel ScreenshotGeometryMapper::preCaptureDisplayModel(QScreen& s
     return display;
 }
 
+QRect ScreenshotGeometryMapper::physicalRectForGeometry(const QRect& logicalGeometry,
+                                                        const qreal devicePixelRatio) {
+    if (devicePixelRatio <= 0.0) {
+        return logicalGeometry;
+    }
+    return QRect(logicalGeometry.left(), logicalGeometry.top(),
+                 qRound(static_cast<qreal>(logicalGeometry.width()) * devicePixelRatio),
+                 qRound(static_cast<qreal>(logicalGeometry.height()) * devicePixelRatio));
+}
+
 QRect ScreenshotGeometryMapper::physicalRectForScreen(const QScreen& screen) {
 #ifdef Q_OS_WIN
     if (QGuiApplication::platformName() == QStringLiteral("windows")) {
@@ -880,15 +890,7 @@ QRect ScreenshotGeometryMapper::physicalRectForScreen(const QScreen& screen) {
         return snow_shot::platform::windows::nativeMonitorRect(screen);
     }
 #endif
-    const QRect logicalGeometry = screen.geometry();
-    const qreal devicePixelRatio = screen.devicePixelRatio();
-    if (devicePixelRatio <= 0.0) {
-        return logicalGeometry;
-    }
-
-    return QRect(logicalGeometry.left(), logicalGeometry.top(),
-                 qRound(static_cast<qreal>(logicalGeometry.width()) * devicePixelRatio),
-                 qRound(static_cast<qreal>(logicalGeometry.height()) * devicePixelRatio));
+    return physicalRectForGeometry(screen.geometry(), screen.devicePixelRatio());
 }
 
 QRectF ScreenshotGeometryMapper::logicalRectFForPhysicalRect(const QRect& rect,

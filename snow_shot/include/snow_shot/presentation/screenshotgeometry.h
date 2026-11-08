@@ -179,6 +179,11 @@ class ScreenshotGeometryMapper final {
                              const QRect& fallbackLogicalBounds = QRect());
     [[nodiscard]] static CapturedDisplayModel preCaptureDisplayModel(QScreen& screen);
     [[nodiscard]] static QRect physicalRectForScreen(const QScreen& screen);
+    // Pure scaling step behind physicalRectForScreen: the logical origin is
+    // preserved and extents round to physical pixels. A non-positive ratio
+    // falls back to the logical rectangle.
+    [[nodiscard]] static QRect physicalRectForGeometry(const QRect& logicalGeometry,
+                                                       qreal devicePixelRatio);
     [[nodiscard]] static QRectF logicalRectFForPhysicalRect(const QRect& rect,
                                                             const QScreen* screen);
     [[nodiscard]] static QRect logicalRectForPhysicalRect(const QRect& rect, const QScreen* screen);
