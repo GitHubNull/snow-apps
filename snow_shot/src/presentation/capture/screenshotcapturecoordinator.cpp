@@ -5,7 +5,7 @@
 #include "screenshotcaptureworker.h"
 
 #if defined(Q_OS_LINUX)
-#include "capturewindowshield.h"
+#include "../../platform/linux/capturewindowshield.h"
 #include "snow_shot/presentation/capture/screenshotqtcaptureprovider.h"
 #include "snow_shot/storage/settingsadapters.h"
 
