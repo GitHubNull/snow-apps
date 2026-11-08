@@ -2179,6 +2179,7 @@ elseif(UNIX)
     list(APPEND PROJECT_CXX_SOURCES
         src/platform/linux/livewindownative.cpp
         src/platform/linux/windowcaptureexclusion.cpp
+        src/presentation/capture/directcaptureqtx11.cpp
         src/presentation/capture/screenshotqtcaptureprovider.cpp)
 endif()
 
@@ -2247,6 +2248,10 @@ target_link_libraries(snow_shot PRIVATE
     snow_shot_image_codec
     MINIZIP::minizip-ng
 )
+if(UNIX AND NOT APPLE)
+    # The Linux capture path grabs through the shared X11 helpers.
+    target_link_libraries(snow_shot PRIVATE snow_shot_linux_x11)
+endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowShotUpdates.cmake")
 if(WIN32)
     target_link_libraries(snow_shot PRIVATE ole32 oleaut32 shell32 uuid)
