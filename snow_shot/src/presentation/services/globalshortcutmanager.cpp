@@ -505,6 +505,24 @@ class GlobalShortcutManager::Impl {
         if (action == GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop)
             return false;
 #endif
+#if defined(Q_OS_LINUX)
+        // The recognition, recording, and native-selection toolchains are not
+        // built on Linux; offering bindings for them would only guarantee
+        // registration failures.
+        switch (action) {
+        case GlobalShortcutAction::ScreenshotOcr:
+        case GlobalShortcutAction::ScreenshotOcrCopy:
+        case GlobalShortcutAction::ScreenshotTranslation:
+        case GlobalShortcutAction::TranslateSelectedText:
+        case GlobalShortcutAction::ScreenRecord:
+        case GlobalShortcutAction::ScreenRecordCopy:
+        case GlobalShortcutAction::OpenScreenRecordingFolder:
+        case GlobalShortcutAction::PinSelectedFiles:
+            return false;
+        default:
+            break;
+        }
+#endif
         if (action != GlobalShortcutAction::TranslateSelectedText) {
             return true;
         }

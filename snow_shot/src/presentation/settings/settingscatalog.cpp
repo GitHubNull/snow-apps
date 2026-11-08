@@ -15,6 +15,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <array>
 
 namespace snow_shot::presentation::settings {
 namespace {
@@ -4915,6 +4916,31 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
         manifest.shortcutAdjustments.remove(
             static_cast<int>(GlobalShortcutAction::TranslateSelectedText));
     }
+#if defined(Q_OS_LINUX)
+    // The recognition, recording, and native-selection toolchains are not built
+    // on Linux, so their tray commands and quick-action cards would only ever
+    // report failures.
+    constexpr std::array<GlobalShortcutAction, 8> kLinuxUnavailableQuickActions{
+        GlobalShortcutAction::ScreenshotOcr,
+        GlobalShortcutAction::ScreenshotOcrCopy,
+        GlobalShortcutAction::ScreenshotTranslation,
+        GlobalShortcutAction::TranslateSelectedText,
+        GlobalShortcutAction::ScreenRecord,
+        GlobalShortcutAction::ScreenRecordCopy,
+        GlobalShortcutAction::OpenScreenRecordingFolder,
+        GlobalShortcutAction::PinSelectedFiles,
+    };
+    for (auto& group : manifest.groups) {
+        group.options.removeIf([&](const SettingsTrayMenuOptionDefinition& option) {
+            return std::find(kLinuxUnavailableQuickActions.begin(),
+                             kLinuxUnavailableQuickActions.end(),
+                             option.shortcutAction) != kLinuxUnavailableQuickActions.end();
+        });
+    }
+    for (const GlobalShortcutAction action : kLinuxUnavailableQuickActions) {
+        manifest.shortcutAdjustments.remove(static_cast<int>(action));
+    }
+#endif
     return manifest;
 }
 
