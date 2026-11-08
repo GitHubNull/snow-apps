@@ -164,10 +164,14 @@ on the overlay, and use the toolbar to edit, copy, or save:
 DISPLAY=:0 ./build/linux-debug/snow_shot/snow_shot
 ```
 
-The floating toolbar is the supported capture entry on Linux. The tray icon
-only appears when the desktop provides a system tray or StatusNotifier host;
-Cinnamon on this validation machine registers neither, so a `QSystemTrayIcon`
-stays invisible there.
+The floating toolbar is the most reliable capture entry on Linux. When the
+desktop provides a StatusNotifier host, the tray icon registers and the tray
+menu is available; on the validation Cinnamon session the watcher reported a
+registered host and listed the running app's `StatusNotifierItem`. On desktops
+without a tray or StatusNotifier host, only the floating toolbar and the main
+window remain. The tray menu still lists recognition and recording commands:
+recording is feature-gated, and the recognition commands reach the screenshot
+step before failing because the OCR backend is not built.
 
 Verify the clipboard and the saved file independently:
 
@@ -281,6 +285,7 @@ see the known limitations.
 - Snow Shot's Windows/macOS integrations (File Explorer selection, printing,
   sharing/AirDrop, startup registration, updater, crashpad) fall back to their
   non-Windows stubs.
-- Neither application has a crash handler or writes a log file on Linux;
-  diagnostics go to stderr.
+- Snow Shot writes structured JSON session logs on Linux under
+  `~/.local/share/SnowShot/snow_shot/logs/<date>/`. Crashpad crash reporting and
+  automatic upload remain Windows-only; diagnostics also go to stderr.
 - Packaging, installers, static Qt, and ARM64 are out of scope.
