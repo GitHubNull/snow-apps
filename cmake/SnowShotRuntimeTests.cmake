@@ -110,14 +110,16 @@ function(snow_shot_add_ocr_runtime_tests)
             TIMEOUT 60 LABELS "unit;windows"
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     endif()
-    add_test(NAME snow-shot-ocr-managed-runtime-tests
-        COMMAND snow-shot-ocr-recognition-service-tests --managed-runtime-only)
-    set_tests_properties(snow-shot-ocr-managed-runtime-tests
-        PROPERTIES
-        TIMEOUT 60 LABELS "unit;windows"
-        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
-    if(APPLE)
-        set_tests_properties(snow-shot-ocr-managed-runtime-tests PROPERTIES LABELS "unit")
+    if(WIN32 OR APPLE)
+        add_test(NAME snow-shot-ocr-managed-runtime-tests
+            COMMAND snow-shot-ocr-recognition-service-tests --managed-runtime-only)
+        set_tests_properties(snow-shot-ocr-managed-runtime-tests
+            PROPERTIES
+            TIMEOUT 60 LABELS "unit;windows"
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+        if(APPLE)
+            set_tests_properties(snow-shot-ocr-managed-runtime-tests PROPERTIES LABELS "unit")
+        endif()
     endif()
     set_tests_properties(snow-shot-ocr-process-lifecycle-tests PROPERTIES TIMEOUT 30
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")

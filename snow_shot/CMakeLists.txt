@@ -393,10 +393,10 @@ if(APPLE)
         "CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=packed"
         "CARGO_PROFILE_RELEASE_FAST_SPLIT_DEBUGINFO=packed")
 endif()
-# The OCR worker depends on the simd-paddle-ocr-rs submodule, which is not
-# initialized for Linux builds; the corresponding feature entries are disabled
-# at runtime on Linux.
-if(WIN32 OR APPLE)
+# The OCR worker uses the simd-paddle-ocr-rs submodule. Linux builds run the
+# CPU-only feature set: gpu stays Windows/Apple-Silicon-only and the
+# crash-diagnostics feature has no Linux crashpad bridge.
+if(WIN32 OR APPLE OR (UNIX AND NOT APPLE))
     include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowOcrToolchain.cmake")
     snow_add_rust_executable(snow_ocr_process
         PACKAGE snow-ocr-process
