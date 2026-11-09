@@ -16,8 +16,11 @@ P2-A 全部完成并真机验收通过；P2-B 代码全部落地，真机滚动�
 - A4 真机验收：OCR 中文识别、翻译（生产 API `snowshot.top`）、QR 解码、表格提取、LaTeX 提取全部通过；损坏 manifest 快速失败并按平台给出重装提示（修复了 Linux 误报 "for this Mac" 的文案缺陷，`93389ad0`）
 - B1 Qt 滚动帧源：根窗口抓取 + 物理选区裁剪 + 容量 1 帧邮箱 + 重复判定，offscreen 测试 `snow-shot-scrolling-qt-source-tests`（`54df387a`）
 - B2 XTest 滚轮 + XShape 输入排除：`snow_shot/src/platform/linux/scrollinput.cpp`、`x11inputregion.cpp`；自动滚动失败与 macOS 同样上报 capture error（`9a96a759`）
-- B3 工具栏放开滚动截图入口（`91b0123d`）；**overlay 帧污染真机核查待做**
-- B4 真机滚动拼接验收、安装树裸跑验收**待做**（验收窗口期机器锁屏，需用户解锁后补）
+- B3 工具栏放开滚动截图入口（`91b0123d`）；真机核查通过：选区内部透出实时内容、缩略图增长，拼接长图无边框/工具栏污染（底部灰色带经对照确认为 Qoder 终端卡片底色与聊天面板渐隐，属真实内容）
+- B4 真机验收：手动滚轮拼接出 621×875 长图（内容连续、无重复/缺失行）；自动滚动走 XTest（`scrolling.wheel_dispatch status=0 Posted`）、内容随滚动变化、到底后转重复帧；水平模式切换 `mode_changed mode=1` 管线正常重启；`cargo test -p snow-stitch-images` 118 passed；`ctest -R scrolling` 15/17 通过
+- 安装树裸跑验收：`cmake --install` 后运行 `bin/snow_shot` 启动/截屏正常，stderr 零告警（除既有 portal/全局鼠标初始化噪声）
+- 遗留（存量，非 P2 引入）：`snow-shot-scrolling-capture-settings-tests` 与其 `--image-split-only` 变体在 Linux 测试树链接失败（测试目标直接编译 `formfields.cpp`/`themecolorscheme.cpp` 又链入含同源 unity 成员的 `snow_shot_settings`，重复符号），从未在本机测试树构建过；P2 相关滚动测试均通过
+- 验证记录：`apply clang-format` 全量通过；P2 相关 crate `cargo clippy -D warnings` 零告警；workspace 全量 clippy 在 Linux 因 platform-cfg 存量问题（snow-media/snow-ui-selector/snow-audio-recorder）失败，属既有状态
 - 拆分记录：`snow-shot-scrolling-capture-exclusion-tests` 仅保留在仍使用原生流的平台（Windows/macOS）；Linux 由新的 Qt source 测试覆盖
 
 ## 0. 硬规则（与 P0/P1 阶段一致）
