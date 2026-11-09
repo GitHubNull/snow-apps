@@ -4940,6 +4940,13 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-scrolling-capture-cadence-tests
     )
 
+    add_executable(snow-shot-scrolling-qt-source-tests
+        tests/screenshot_scrolling_qt_source_tests.cpp)
+    target_include_directories(snow-shot-scrolling-qt-source-tests PRIVATE include src)
+    target_link_libraries(snow-shot-scrolling-qt-source-tests PRIVATE Qt6::Core Qt6::Gui)
+    add_test(NAME snow-shot-scrolling-qt-source-tests
+        COMMAND snow-shot-scrolling-qt-source-tests -platform offscreen)
+
     add_executable(snow-shot-screenshot-canvas-renderer-tests
         tests/screenshot_canvas_renderer_tests.cpp
         tests/screenshot_session_input_cleanup_tests.cpp
@@ -8653,6 +8660,9 @@ if(SNOW_SHOT_BUILD_TESTS)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
 
+    # Linux drives scrolling capture through the Qt grab source, so the native
+    # stream stub contract in this test no longer describes the factory there.
+    if(NOT (UNIX AND NOT APPLE))
     add_executable(snow-shot-scrolling-capture-exclusion-tests
         tests/scrolling_capture_exclusion_tests.cpp
         src/presentation/capture/screenshotscrollingpipeline.cpp
@@ -8675,6 +8685,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-scrolling-capture-exclusion-tests PROPERTIES
         LABELS "unit" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    endif()
 
     get_target_property(_recording_test_sources snow-shot-screenshot-tool-palette-tests SOURCES)
     list(FILTER _recording_test_sources EXCLUDE REGEX "tests/screenshot_tool_palette_tests.cpp$")
