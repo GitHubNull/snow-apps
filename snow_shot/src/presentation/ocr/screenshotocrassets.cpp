@@ -27,6 +27,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
+#include <QtEndian>
 
 #include <mz.h>
 #include <mz_strm.h>
@@ -47,6 +48,10 @@ constexpr auto kManifestName = "asset-manifest.json";
 constexpr auto kPlatform = "macos-arm64";
 #elif defined(Q_OS_MACOS) && defined(Q_PROCESSOR_X86_64)
 constexpr auto kPlatform = "macos-x64";
+#elif defined(Q_OS_LINUX) && defined(Q_PROCESSOR_X86_64)
+constexpr auto kPlatform = "linux-x64";
+#elif defined(Q_OS_LINUX) && defined(Q_PROCESSOR_ARM_64)
+constexpr auto kPlatform = "linux-arm64";
 #elif defined(Q_OS_WIN) && defined(Q_PROCESSOR_ARM_64)
 constexpr auto kPlatform = "windows-arm64";
 #else
@@ -246,7 +251,7 @@ std::optional<Descriptor> loadDescriptor(const QString& root, QString* error) {
     Descriptor result;
     result.runtimeVersion = runtime.value(QStringLiteral("version")).toString();
     result.platform = runtime.value(QStringLiteral("platform")).toString();
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
     result.bundled = true;
 #endif
     result.executable = result.bundled
@@ -442,6 +447,26 @@ bool validateBundledRuntime(const QString& directory, const Descriptor& descript
             return false;
         const QByteArray header = file.read(32);
         if (header.size() != 32 || header.first(8) != expectedHeader) {
+            return false;
+        }
+    }
+#elif defined(Q_OS_LINUX)
+    // Bundled runtimes use little-endian 64-bit ELF files matching the app.
+#if defined(Q_PROCESSOR_ARM_64)
+    const quint16 expectedMachine = 0x00b7;
+#else
+    const quint16 expectedMachine = 0x003e;
+#endif
+    for (const auto& item : descriptor.runtimeFiles) {
+        QFile file(QDir(directory).filePath(item.name));
+        if (!file.open(QIODevice::ReadOnly))
+            return false;
+        const QByteArray header = file.read(32);
+        if (header.size() != 32 || header.first(6) != QByteArray::fromHex("7f454c4602" "01")) {
+            return false;
+        }
+        if (qFromLittleEndian<quint16>(reinterpret_cast<const uchar*>(header.constData()) + 18) !=
+            expectedMachine) {
             return false;
         }
     }
@@ -931,7 +956,7 @@ class ScreenshotOcrAssets::Impl final {
         if (!descriptor.has_value()) {
             if (requireBundledRuntime)
                 *error = QStringLiteral("store_runtime_invalid");
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
             *error = QStringLiteral("bundled_runtime_invalid");
 #endif
             return false;

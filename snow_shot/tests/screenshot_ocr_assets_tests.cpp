@@ -40,8 +40,10 @@ const QString kWindowsWorkerName =
     QStringLiteral("snow-ocr-process-1.2.1-%1.exe").arg(kWindowsPlatform);
 const QString kWindowsArchiveName =
     QStringLiteral("snow-ocr-runtime-1.2.1-%1.zip").arg(kWindowsPlatform);
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
 const QString kWorkerName = QStringLiteral("snow-ocr-process");
+#endif
+#ifdef Q_OS_MACOS
 #if defined(Q_PROCESSOR_ARM_64)
 const QString kMacPlatform = QStringLiteral("macos-arm64");
 const QString kOtherMacPlatform = QStringLiteral("macos-x64");
@@ -52,6 +54,17 @@ const QString kMacPlatform = QStringLiteral("macos-x64");
 const QString kOtherMacPlatform = QStringLiteral("macos-arm64");
 const QByteArray kMacHeader = QByteArray::fromHex("cffaedfe07000001") + QByteArray(24, '\0');
 const QByteArray kOtherMacHeader = QByteArray::fromHex("cffaedfe0c000001") + QByteArray(24, '\0');
+#endif
+#endif
+#ifdef Q_OS_LINUX
+#if defined(Q_PROCESSOR_ARM_64)
+const QString kLinuxPlatform = QStringLiteral("linux-arm64");
+const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0')
+                                    + QByteArray::fromHex("b700") + QByteArray(12, '\0');
+#else
+const QString kLinuxPlatform = QStringLiteral("linux-x64");
+const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0')
+                                    + QByteArray::fromHex("3e00") + QByteArray(12, '\0');
 #endif
 #endif
 void require(bool condition, const char* message) {
@@ -194,6 +207,7 @@ void writeAssetManifest(const QString& root, bool completePayload) {
                    QStringLiteral("PP-OCRv6_rec_medium.onnx"), QByteArray("medium-recognizer"),
                    QStringLiteral("ppocrv6_dict.txt"), dictionary),
          }}};
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
 #ifdef Q_OS_MACOS
     const QByteArray macProcess = kMacHeader + process;
     writeFixture(QDir(root).filePath(kWorkerName), macProcess);
@@ -210,6 +224,24 @@ void writeAssetManifest(const QString& root, bool completePayload) {
                     {QStringLiteral("protocol"), 7},
                     {QStringLiteral("executable"), kWorkerName},
                     {QStringLiteral("files"), QJsonArray{assetFile(kWorkerName, macProcess)}}});
+#endif
+#ifdef Q_OS_LINUX
+    const QByteArray linuxProcess = kLinuxHeader + process;
+    writeFixture(QDir(root).filePath(kWorkerName), linuxProcess);
+    require(QFile::setPermissions(QDir(root).filePath(kWorkerName), QFileDevice::ReadOwner |
+                                                                        QFileDevice::WriteOwner |
+                                                                        QFileDevice::ExeOwner),
+            "the fixture worker must have execute permission");
+    manifest.insert(QStringLiteral("schema"), 3);
+    manifest.insert(
+        QStringLiteral("runtime"),
+        QJsonObject{{QStringLiteral("version"), QStringLiteral("1.2.1")},
+                    {QStringLiteral("platform"), kLinuxPlatform},
+                    {QStringLiteral("delivery"), QStringLiteral("bundled")},
+                    {QStringLiteral("protocol"), 7},
+                    {QStringLiteral("executable"), kWorkerName},
+                    {QStringLiteral("files"), QJsonArray{assetFile(kWorkerName, linuxProcess)}}});
+#endif
 #endif
     writeFixture(QDir(root).filePath(QStringLiteral("asset-manifest.json")),
                  QJsonDocument(manifest).toJson(QJsonDocument::Compact));
@@ -338,7 +370,7 @@ void installedAssetsUseLightweightChecks() {
                  {QStringLiteral("PP-OCRv6_det_small.onnx"),
                   QStringLiteral("PP-OCRv6_rec_small.onnx"), QStringLiteral("ppocrv6_dict.txt")})
                 changeFixtureContentsWithoutResizing(model.filePath(name));
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
             changeFixtureContentsWithoutResizing(QDir(offline.path()).filePath(kWorkerName));
 #else
             const QDir runtime(
@@ -973,7 +1005,7 @@ void concurrentAcquisitionAndInterruptedDownload() {
 }
 
 void runtimeArchivesExtractThroughUnicodeCachePaths() {
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_WIN
     // The macOS fixture manifest switches to the bundled runtime schema, which
     // never reaches archive extraction; the downloaded runtime path below is
     // the Windows delivery.
@@ -1032,7 +1064,7 @@ void runtimeArchivesExtractThroughUnicodeCachePaths() {
 }
 
 void storeRuntimeNeverFallsBackToCachedCode() {
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_WIN
     for (const bool corrupt : {false, true}) {
         QTemporaryDir offline;
         QTemporaryDir cache;
@@ -1071,7 +1103,7 @@ void storeRuntimeNeverFallsBackToCachedCode() {
 }
 
 void storeRuntimeCanAcquireModelData() {
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_WIN
     QTemporaryDir offline;
     QTemporaryDir cache;
     writeAssetManifest(offline.path(), true);
