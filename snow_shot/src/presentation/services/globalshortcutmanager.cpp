@@ -506,14 +506,11 @@ class GlobalShortcutManager::Impl {
             return false;
 #endif
 #if defined(Q_OS_LINUX)
-        // The recognition, recording, and native-selection toolchains are not
-        // built on Linux; offering bindings for them would only guarantee
-        // registration failures.
+        // Recording and native file pinning have no Linux backends; offering
+        // bindings for them would only guarantee registration failures.
+        // TranslateSelectedText additionally has no selected-text backend
+        // (snow-selected-text ships Windows/macOS implementations only).
         switch (action) {
-        case GlobalShortcutAction::ScreenshotOcr:
-        case GlobalShortcutAction::ScreenshotOcrCopy:
-        case GlobalShortcutAction::ScreenshotTranslation:
-        case GlobalShortcutAction::TranslateSelectedText:
         case GlobalShortcutAction::ScreenRecord:
         case GlobalShortcutAction::ScreenRecordCopy:
         case GlobalShortcutAction::OpenScreenRecordingFolder:

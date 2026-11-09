@@ -23,14 +23,8 @@ makeScreenshotToolbarPresentationState(const ScreenshotInteractionState& interac
     state.selectionDragging = interaction.dragging();
     state.editing = interaction.editing();
     const QRect selectionPixels = state.selectionPixels;
-#if defined(Q_OS_LINUX)
-    // The OCR worker (snow_ocr_process) is not built for Linux, so its toolbar
-    // entries stay disabled instead of failing after the click.
-    state.ocrAvailable = false;
-#else
     state.ocrAvailable = selectionPixels.width() < 1 || selectionPixels.height() < 1 ||
                          screenshotOcrImageWithinPixelLimit(selectionPixels.size());
-#endif
     state.aspectRatioLocked = selection.aspectRatioLocked();
     state.aspectRatioPreset = selection.aspectRatioPreset();
     state.cornerRadius = selection.cornerRadius();

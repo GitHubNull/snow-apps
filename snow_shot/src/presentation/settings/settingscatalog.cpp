@@ -4917,14 +4917,9 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
             static_cast<int>(GlobalShortcutAction::TranslateSelectedText));
     }
 #if defined(Q_OS_LINUX)
-    // The recognition, recording, and native-selection toolchains are not built
-    // on Linux, so their tray commands and quick-action cards would only ever
-    // report failures.
-    constexpr std::array<GlobalShortcutAction, 8> kLinuxUnavailableQuickActions{
-        GlobalShortcutAction::ScreenshotOcr,
-        GlobalShortcutAction::ScreenshotOcrCopy,
-        GlobalShortcutAction::ScreenshotTranslation,
-        GlobalShortcutAction::TranslateSelectedText,
+    // Recording and native file pinning have no Linux backends, so their tray
+    // commands and quick-action cards would only ever report failures.
+    constexpr std::array<GlobalShortcutAction, 4> kLinuxUnavailableQuickActions{
         GlobalShortcutAction::ScreenRecord,
         GlobalShortcutAction::ScreenRecordCopy,
         GlobalShortcutAction::OpenScreenRecordingFolder,

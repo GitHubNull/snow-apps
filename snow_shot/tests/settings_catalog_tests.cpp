@@ -711,6 +711,25 @@ void builtInCatalogIsCompleteAndValid() {
 #ifdef Q_OS_MACOS
     const auto& expectedPlatformItems = macOnlyItems;
     const auto& excludedPlatformItems = windowsOnlyItems;
+#elif defined(Q_OS_LINUX)
+    // Linux shares the non-macOS catalog shape, except the Explorer-integration
+    // settings that are compiled for Windows only.
+    const QSet<QString> linuxOnlyItems{
+        QStringLiteral("system.launch-as-administrator"),
+        QStringLiteral("system.restart-as-administrator"),
+        QStringLiteral("screenshot.api-mode"),
+        QStringLiteral("screen-recording.api-mode"),
+        QStringLiteral("screenshot.window-element-api"),
+        QStringLiteral("screenshot.restore-original-screen-colors"),
+    };
+    const QSet<QString> windowsExplorerOnlyItems{
+        QStringLiteral("system.context-menu-mode"),
+        QStringLiteral("system.annotation-mode-when-opening-for-editing"),
+        QStringLiteral("windows-context-menu-shortcut.edit_with_snow_shot"),
+    };
+    const QSet<QString> excludedLinuxItems = macOnlyItems | windowsExplorerOnlyItems;
+    const auto& expectedPlatformItems = linuxOnlyItems;
+    const auto& excludedPlatformItems = excludedLinuxItems;
 #else
     const auto& expectedPlatformItems = windowsOnlyItems;
     const auto& excludedPlatformItems = macOnlyItems;
@@ -900,13 +919,19 @@ void builtInCatalogIsCompleteAndValid() {
             "system Screen recording must expose its own API mode");
     const auto& recordingApiSelect =
         std::get<settings::SettingsSelectDefinition>(recordingApiMode->payload);
+    const QString expectedRecordingApiDefault =
+#ifdef Q_OS_WIN
+        QStringLiteral("wgc");
+#else
+        QStringLiteral("dxgi");
+#endif
     require(recordingApiSelect.binding == settings::SettingsSelectBinding::ScreenRecordingApiMode &&
                 recordingApiSelect.options.size() == 3 &&
                 recordingApiSelect.options[0].value == QStringLiteral("dxgi") &&
                 recordingApiSelect.options[1].value == QStringLiteral("wgc") &&
                 recordingApiSelect.options[2].value == QStringLiteral("gdi") &&
                 storage::ConfigurationSchema::defaultValue(recordingApiMode->configurationKey) ==
-                    QStringLiteral("wgc"),
+                    expectedRecordingApiDefault,
             "recording API mode must offer exactly DXGI, WGC, GDI and default to WGC");
 #endif
     require(
@@ -1851,7 +1876,7 @@ void builtInCatalogIsCompleteAndValid() {
             std::get<settings::SettingsLocalShortcutDefinition>(
                 screenshotShortcuts->items.constFirst().payload)
                     .scope == settings::SettingsLocalShortcutScope::Screenshot &&
-            drawingShortcuts != nullptr && drawingShortcuts->items.size() == 19 &&
+            drawingShortcuts != nullptr && drawingShortcuts->items.size() == 20 &&
             drawingShortcuts->itemLayout == settings::SettingsSectionItemLayout::TwoColumnGrid &&
             drawingShortcuts->items.at(2).id == QStringLiteral("drawing-shortcut.speech_bubble") &&
             drawingShortcuts->items.at(2).title.translated() == QStringLiteral("Speech Bubble") &&
@@ -1947,33 +1972,38 @@ void builtInCatalogIsCompleteAndValid() {
             otherShortcutSection->itemLayout ==
                 settings::SettingsSectionItemLayout::TwoColumnGrid &&
             otherShortcutSection->title.translated() == QStringLiteral("Image Recognition") &&
-            drawingShortcuts->items.at(9).id == QStringLiteral("drawing-shortcut.magnifier") &&
-            drawingShortcuts->items.at(9).title.translated() == QStringLiteral("Magnifier") &&
-            drawingShortcuts->items.at(9).configurationKey ==
+            drawingShortcuts->items.at(10).id == QStringLiteral("drawing-shortcut.magnifier") &&
+            drawingShortcuts->items.at(10).title.translated() == QStringLiteral("Magnifier") &&
+            drawingShortcuts->items.at(10).configurationKey ==
                 QStringLiteral("drawing_shortcuts/magnifier") &&
-            drawingShortcuts->items.at(15).id == QStringLiteral("drawing-shortcut.reset_canvas") &&
-            drawingShortcuts->items.at(15).title.translated() == QStringLiteral("Reset canvas") &&
-            drawingShortcuts->items.at(15).configurationKey ==
+            drawingShortcuts->items.at(16).id == QStringLiteral("drawing-shortcut.reset_canvas") &&
+            drawingShortcuts->items.at(16).title.translated() == QStringLiteral("Reset canvas") &&
+            drawingShortcuts->items.at(16).configurationKey ==
                 QStringLiteral("drawing_shortcuts/reset_canvas") &&
-            drawingShortcuts->items.at(17).id == QStringLiteral("screenshot-shortcut.undo") &&
-            drawingShortcuts->items.at(18).id == QStringLiteral("screenshot-shortcut.redo") &&
+            drawingShortcuts->items.at(18).id == QStringLiteral("screenshot-shortcut.undo") &&
+            drawingShortcuts->items.at(19).id == QStringLiteral("screenshot-shortcut.redo") &&
             drawingShortcuts->items.at(4).configurationKey ==
                 QStringLiteral("drawing_shortcuts/distance") &&
-            drawingShortcuts->items.at(5).id == QStringLiteral("drawing-shortcut.angle") &&
+            drawingShortcuts->items.at(5).id == QStringLiteral("drawing-shortcut.bracket") &&
             drawingShortcuts->items.at(5).title.translated() ==
-                QStringLiteral("Angle annotation") &&
+                QStringLiteral("Bracket annotation") &&
             drawingShortcuts->items.at(5).configurationKey ==
+                QStringLiteral("drawing_shortcuts/bracket") &&
+            drawingShortcuts->items.at(6).id == QStringLiteral("drawing-shortcut.angle") &&
+            drawingShortcuts->items.at(6).title.translated() ==
+                QStringLiteral("Angle annotation") &&
+            drawingShortcuts->items.at(6).configurationKey ==
                 QStringLiteral("drawing_shortcuts/angle") &&
             std::get<settings::SettingsLocalShortcutDefinition>(
-                drawingShortcuts->items.at(5).payload)
+                drawingShortcuts->items.at(6).payload)
                     .scope == settings::SettingsLocalShortcutScope::Drawing &&
             std::get<settings::SettingsLocalShortcutDefinition>(
-                drawingShortcuts->items.at(5).payload)
+                drawingShortcuts->items.at(6).payload)
                     .iconFactory() ==
                 snow_shot::presentation::icons::custom::outlined::AngleAnnotation() &&
-            drawingShortcuts->items.at(6).configurationKey ==
+            drawingShortcuts->items.at(7).configurationKey ==
                 QStringLiteral("drawing_shortcuts/line") &&
-            drawingShortcuts->items.at(10).configurationKey ==
+            drawingShortcuts->items.at(11).configurationKey ==
                 QStringLiteral("drawing_shortcuts/spotlight") &&
             drawingShortcuts->items.constFirst().id == QStringLiteral("drawing-shortcut.select") &&
             drawingShortcuts->items.at(1).id == QStringLiteral("drawing-shortcut.shape"),
@@ -2981,6 +3011,12 @@ void compactTrayManifestMatchesRegistryCatalog() {
         defaultOptionIds.push_back(value.toString());
         defaultOptionSet.insert(value.toString());
     }
+#if defined(Q_OS_LINUX)
+    // The compact Linux manifest filters recording quick actions that the
+    // schema default still lists.
+    defaultOptionIds.removeAll(QStringLiteral("quick.screen-record"));
+    defaultOptionSet.remove(QStringLiteral("quick.screen-record"));
+#endif
     QStringList orderedManifestDefaults;
     for (const auto& group : compact.groups) {
         for (const auto& option : group.options) {
@@ -2992,11 +3028,32 @@ void compactTrayManifestMatchesRegistryCatalog() {
     require(defaultOptionIds == orderedManifestDefaults,
             "tray defaults must follow the canonical manifest order");
 
-    require(compact.groups.size() == projectedGroups.size(),
+#if defined(Q_OS_LINUX)
+    // The compact Linux manifest filters recording and file-pinning quick
+    // actions; project the catalog through the same set for comparison.
+    auto filteredProjectedGroups = projectedGroups;
+    for (auto& group : filteredProjectedGroups) {
+        group.options.removeIf([](const settings::SettingsTrayMenuOptionDefinition& option) {
+            return option.shortcutAction ==
+                       presentation::GlobalShortcutAction::ScreenRecord ||
+                   option.shortcutAction ==
+                       presentation::GlobalShortcutAction::ScreenRecordCopy ||
+                   option.shortcutAction ==
+                       presentation::GlobalShortcutAction::OpenScreenRecordingFolder ||
+                   option.shortcutAction ==
+                       presentation::GlobalShortcutAction::PinSelectedFiles;
+        });
+    }
+    const auto& comparisonGroups = filteredProjectedGroups;
+#else
+    const auto& comparisonGroups = projectedGroups;
+#endif
+
+    require(compact.groups.size() == comparisonGroups.size(),
             "the compact tray manifest must preserve catalog group count");
     for (int groupIndex = 0; groupIndex < compact.groups.size(); ++groupIndex) {
         const auto& compactGroup = compact.groups.at(groupIndex);
-        const auto& projectedGroup = projectedGroups.at(groupIndex);
+        const auto& projectedGroup = comparisonGroups.at(groupIndex);
         require(compactGroup.id == projectedGroup.id &&
                     compactGroup.options.size() == projectedGroup.options.size(),
                 "the compact tray manifest must preserve group and option ordering");
@@ -3040,6 +3097,15 @@ void compactTrayManifestMatchesRegistryCatalog() {
           presentation::GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop,
 #endif
           presentation::GlobalShortcutAction::ToggleGlobalHotkeys}) {
+#if defined(Q_OS_LINUX)
+        // Filtered actions are absent from the compact Linux manifest.
+        if (action == presentation::GlobalShortcutAction::ScreenRecord ||
+            action == presentation::GlobalShortcutAction::ScreenRecordCopy ||
+            action == presentation::GlobalShortcutAction::OpenScreenRecordingFolder ||
+            action == presentation::GlobalShortcutAction::PinSelectedFiles) {
+            continue;
+        }
+#endif
         require(compact.shortcutActionTitle(action, 0) == catalog.shortcutActionTitle(action, 0) &&
                     compact.shortcutActionTitle(action, 99) ==
                         catalog.shortcutActionTitle(action, 99),

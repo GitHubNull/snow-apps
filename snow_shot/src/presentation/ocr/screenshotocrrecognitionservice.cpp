@@ -697,12 +697,6 @@ class ScreenshotOcrRecognitionService::Impl final {
         scheduleRetry(seconds);
     }
     void prepareAssets() {
-#if defined(Q_OS_LINUX)
-        // The OCR worker process is not built for Linux, so model assets can never
-        // be prepared; fail pending work without entering the retry loop.
-        failPendingForAssetError();
-        return;
-#else
         if (m_assetManager == nullptr) {
             failPendingForAssetError();
             if (!m_retryPending)
@@ -713,7 +707,6 @@ class ScreenshotOcrRecognitionService::Impl final {
             m_assetPreparing = true;
             m_assetManager->prepare();
         }
-#endif
     }
     void releaseSession() {
         m_sessionState = SessionState::Releasing;

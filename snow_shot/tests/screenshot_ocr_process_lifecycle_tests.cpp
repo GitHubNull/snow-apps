@@ -198,7 +198,7 @@ void imageTransfersConvertDirectlyWithoutPublishingReady() {
         require(takeU32(header, stateOffset, &state) && state == kSlotFree,
                 "failed OCR staging must leave Ready unpublished");
         require(std::all_of(slot.begin() + kSlotHeaderBytes, slot.end(),
-                            [](uchar value) { return value == sentinel; }),
+                            [sentinel](uchar value) { return value == sentinel; }),
                 "OCR capacity failure must not write pixel bytes");
     };
     failUnpublished(fixture, static_cast<qsizetype>(slot.size()));
@@ -1011,6 +1011,10 @@ void ocrProcessLifecycleTests() {
                 "missing resources must postpone resident startup without blocking the caller");
         require(QFile::copy(QCoreApplication::applicationFilePath(), delayedOptions.processPath),
                 "delayed runtime fixture must become available");
+        require(QFile::setPermissions(delayedOptions.processPath,
+                                      QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                          QFileDevice::ExeOwner),
+                "delayed runtime fixture must be executable");
         require(
             waitUntil([&] { return service.processId() != 0; }),
             "background retries must automatically start the process when resources become ready");
