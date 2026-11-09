@@ -517,6 +517,12 @@ bool snowTestScrollPermission() {
 ScrollInputResult snowTestSendScreenshotScroll(const QRect&, const QPoint&) {
     return {ScrollInputResult::Status::Posted, 0};
 }
+#elif defined(Q_OS_LINUX)
+namespace x11 {
+ScrollInputResult snowTestSendScrollingWheelStep(const QRect&, const QPoint&) {
+    return {ScrollInputResult::Status::Posted, 0};
+}
+} // namespace x11
 #else
 namespace windows {
 ScrollInputResult snowTestSendScrollingWheelStep(const QRect&, const QPoint&) {

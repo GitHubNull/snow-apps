@@ -5052,6 +5052,11 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-screenshot-canvas-renderer-tests --selection-effect-preview-only -platform offscreen)
     set_tests_properties(snow-shot-selection-effect-preview-tests PROPERTIES LABELS "unit")
     snow_shot_link_macos_window_platform(snow-shot-screenshot-canvas-renderer-tests)
+    if(UNIX AND NOT APPLE)
+        # The overlay window routes scrolling input through the X11 shape helper.
+        target_link_libraries(snow-shot-screenshot-canvas-renderer-tests PRIVATE
+            snow_shot_linux_x11)
+    endif()
     target_include_directories(snow-shot-screenshot-canvas-renderer-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
