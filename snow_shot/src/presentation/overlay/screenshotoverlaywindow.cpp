@@ -18,6 +18,9 @@
 #ifdef Q_OS_MACOS
 #include "snow_shot/platform/screenshotnative.h"
 #endif
+#ifdef Q_OS_LINUX
+#include "snow_shot/platform/linux/x11inputregion.h"
+#endif
 #include <QGuiApplication>
 #include <QImage>
 #include <QScreen>
@@ -577,6 +580,20 @@ void ScreenshotOverlayWindow::updateScrollingInputTransparency() {
         snow_shot::platform::windows::setWindowInputTransparent(this, m_scrollingCaptureMode));
 #elif defined(Q_OS_MACOS)
     snow_shot::platform::setScreenshotInputTransparent(this, m_scrollingCaptureMode);
+#elif defined(Q_OS_LINUX)
+    // X11 has no whole-window click-through that keeps the frame interactive,
+    // so exclude just the scrolling viewport from the overlay's input shape.
+    QRect hole;
+    if (m_scrollingCaptureMode && m_canvas != nullptr && m_screenshotRenderer != nullptr) {
+        const QRectF selection = m_screenshotRenderer->selection();
+        if (!selection.isEmpty()) {
+            hole = m_canvas->canvasToViewTransform()
+                       .mapRect(selection)
+                       .translated(m_canvas->pos())
+                       .toAlignedRect();
+        }
+    }
+    static_cast<void>(snow_shot::platform::x11::setWindowInputHole(this, hole));
 #endif
 }
 

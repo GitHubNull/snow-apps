@@ -1040,6 +1040,14 @@ if(UNIX AND NOT APPLE)
         message(FATAL_ERROR
             "XFixes is required for Linux capture and global shortcuts. Install libxfixes-dev.")
     endif()
+    if(NOT X11_Xtst_FOUND)
+        message(FATAL_ERROR
+            "XTEST is required for automatic scrolling capture. Install libxtst-dev.")
+    endif()
+    if(NOT X11_Xext_FOUND)
+        message(FATAL_ERROR
+            "Xext is required for scrolling input regions. Install libxext-dev.")
+    endif()
     add_library(snow_shot_linux_x11 STATIC
         include/snow_shot/platform/linux/x11connection.h
         src/platform/linux/x11connection.cpp
@@ -1048,12 +1056,21 @@ if(UNIX AND NOT APPLE)
         include/snow_shot/platform/linux/x11cursor.h
         src/platform/linux/x11cursor.cpp
         include/snow_shot/platform/linux/x11windowquery.h
-        src/platform/linux/x11windowquery.cpp)
+        src/platform/linux/x11windowquery.cpp
+        include/snow_shot/platform/linux/scrollinput.h
+        src/platform/linux/scrollinput.cpp
+        include/snow_shot/platform/linux/x11inputregion.h
+        src/platform/linux/x11inputregion.cpp)
     target_include_directories(snow_shot_linux_x11
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_include_directories(snow_shot_linux_x11
         SYSTEM PUBLIC "${X11_INCLUDE_DIR}")
-    target_link_libraries(snow_shot_linux_x11 PUBLIC Qt6::Gui X11::X11 X11::Xfixes)
+    target_link_libraries(snow_shot_linux_x11 PUBLIC Qt6::Gui Qt6::Widgets X11::X11 X11::Xfixes
+        X11::Xtst X11::Xext)
+    # The backends include X11 headers whose None/True/False/Status macros would
+    # poison every file sharing their unity translation unit.
+    set_source_files_properties(src/platform/linux/scrollinput.cpp
+        src/platform/linux/x11inputregion.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/components/screenshothistorypagewidget.cpp"
      _snow_shot_history_source)

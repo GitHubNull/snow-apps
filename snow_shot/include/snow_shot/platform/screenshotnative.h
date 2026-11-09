@@ -1,6 +1,9 @@
 #ifndef SNOW_SHOT_PLATFORM_SCREENSHOTNATIVE_H
 #define SNOW_SHOT_PLATFORM_SCREENSHOTNATIVE_H
 #include "snow_shot/platform/windows/scrollinput.h"
+#ifdef Q_OS_LINUX
+#include "snow_shot/platform/linux/scrollinput.h"
+#endif
 class QWidget;
 namespace snow_shot::platform {
 using ScrollInputResult = windows::ScrollInputResult;
@@ -36,7 +39,11 @@ inline bool screenshotScrollPermission() {
     return true;
 }
 inline ScrollInputResult sendScreenshotScroll(const QRect& desktopSelection, const QPoint& delta) {
+#if defined(Q_OS_LINUX)
+    return x11::sendScrollingWheelStep(desktopSelection, delta);
+#else
     return windows::sendScrollingWheelStep(desktopSelection, delta);
+#endif
 }
 #endif
 } // namespace snow_shot::platform

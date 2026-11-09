@@ -699,7 +699,7 @@ struct ScreenshotScrollingCaptureController::Impl {
                 return;
             }
             const auto result = snow_shot::platform::sendScreenshotScroll(selection, delta);
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
             if (result.status != snow_shot::platform::ScrollInputResult::Status::Posted) {
                 handleCaptureError(generation, QStringLiteral("automatic scroll dispatch failed"));
             }
