@@ -10948,6 +10948,41 @@ foreach(_ocr_process_host_target IN ITEMS snow_shot snow-shot-ocr-recognition-se
 endforeach()
 unset(_ocr_process_host_target)
 
+# Linux bundles the same schema-3 payload as macOS: the worker lands next to
+# the host executable and the small model with its manifest under assets/ocr.
+if(UNIX AND NOT APPLE AND TARGET snow_ocr_process
+        AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|aarch64)$")
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+        set(SNOW_LINUX_OCR_ARCH "arm64")
+    else()
+        set(SNOW_LINUX_OCR_ARCH "x64")
+    endif()
+    set(SNOW_LINUX_OCR_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/snow-shot-linux-ocr.py")
+    set(SNOW_LINUX_OCR_MANIFEST
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/snow-shot-ocr-asset-manifest.json")
+    foreach(_host IN ITEMS snow_shot snow-shot-ocr-recognition-service-tests)
+        if(TARGET ${_host})
+            # Always check the content hashes: Cargo can rebuild the worker
+            # without relinking its Qt host.
+            add_custom_target(${_host}-ocr-assets
+                COMMAND "${Python3_EXECUTABLE}" "${SNOW_LINUX_OCR_TOOL}" stage
+                    --arch "${SNOW_LINUX_OCR_ARCH}"
+                    --manifest "${SNOW_LINUX_OCR_MANIFEST}"
+                    --runtime-dir "$<TARGET_FILE_DIR:${_host}>"
+                    --worker "$<TARGET_FILE:snow_ocr_process>"
+                DEPENDS snow_ocr_process
+                    "${SNOW_LINUX_OCR_TOOL}" "${SNOW_LINUX_OCR_MANIFEST}"
+                VERBATIM
+            )
+            add_dependencies(${_host} ${_host}-ocr-assets)
+        endif()
+    endforeach()
+    install(DIRECTORY "$<TARGET_FILE_DIR:snow_shot>/assets/ocr"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
+    )
+endif()
+
 if(SNOW_SHOT_BUILD_BENCHMARKS)
     add_executable(snow-shot-qr-performance-benchmark
         tests/screenshot_qr_performance_benchmark.cpp
