@@ -41,13 +41,13 @@ ScreenshotToolPalette::Options screenshotToolbarOptions() {
     options.showTextTool = true;
     options.showSerialNumberTool = true;
 #if defined(Q_OS_LINUX)
-    // Recording and scrolling capture need native Linux capture backends that
-    // do not exist yet; recognition tools run through the bundled OCR worker.
+    // Recording still needs a native Linux encoder; recognition and scrolling
+    // capture run through the bundled OCR worker and the Qt grab source.
     options.showOcrTool = true;
     options.showTextTranslationTool = true;
     options.showTableTool = true;
     options.showQrTool = true;
-    options.showScrollingScreenshotTool = false;
+    options.showScrollingScreenshotTool = true;
     options.showScreenRecordButton = false;
 #else
     options.showOcrTool = true;
