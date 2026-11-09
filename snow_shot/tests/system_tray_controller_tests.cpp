@@ -1499,34 +1499,32 @@ int main(int argc, char* argv[]) {
 #else
         16;
 #endif
-    require(
-        QSet<QString>(normalizedDefaultMenuOptions.cbegin(), normalizedDefaultMenuOptions.cend()) ==
-                defaultMenuOptionSet &&
-            defaultVisibleActions.size() == expectedDefaultVisibleActions &&
-            screenshotMenuAction != nullptr &&
-            screenshotMenuAction->isVisible() && delayedScreenshotMenuAction != nullptr &&
-            delayedScreenshotMenuAction->isVisible() &&
+    require(QSet<QString>(normalizedDefaultMenuOptions.cbegin(),
+                          normalizedDefaultMenuOptions.cend()) == defaultMenuOptionSet &&
+                defaultVisibleActions.size() == expectedDefaultVisibleActions &&
+                screenshotMenuAction != nullptr && screenshotMenuAction->isVisible() &&
+                delayedScreenshotMenuAction != nullptr &&
+                delayedScreenshotMenuAction->isVisible() &&
 #if defined(Q_OS_LINUX)
-            recordingToggleMenuAction == nullptr &&
+                recordingToggleMenuAction == nullptr &&
 #else
-            recordingToggleMenuAction != nullptr &&
-            !recordingToggleMenuAction->isVisible() &&
+                recordingToggleMenuAction != nullptr && !recordingToggleMenuAction->isVisible() &&
 #endif
-            !screenshotMenuAction->icon().isNull() &&
-            hotkeyToggleMenuAction != nullptr && hotkeyToggleMenuAction->isVisible() &&
-            hotkeyToggleMenuAction->isCheckable() && !hotkeyToggleMenuAction->isChecked() &&
-            showMainWindowMenuAction != nullptr && showMainWindowMenuAction->isVisible() &&
-            !showMainWindowMenuAction->icon().isNull() && restartMenuAction != nullptr &&
-            !restartMenuAction->isVisible() && !restartMenuAction->isCheckable() &&
-            !restartMenuAction->icon().isNull() && exitMenuAction != nullptr &&
-            exitMenuAction->isVisible() && !exitMenuAction->icon().isNull() &&
-            windowGroupMenuAction != nullptr && windowGroupMenuAction->isVisible() &&
-            actionForId(QStringLiteral("tray.window-grouping")) == windowGroupMenuAction &&
-            defaultVisibleActions.contains(hotkeyToggleMenuAction) &&
-            defaultVisibleActions.contains(showMainWindowMenuAction) &&
-            defaultVisibleActions.indexOf(windowGroupMenuAction) ==
-                defaultVisibleActions.indexOf(showMainWindowMenuAction) - 1,
-        "the tray menu should expose the twelve default options in five catalog groups");
+                !screenshotMenuAction->icon().isNull() && hotkeyToggleMenuAction != nullptr &&
+                hotkeyToggleMenuAction->isVisible() && hotkeyToggleMenuAction->isCheckable() &&
+                !hotkeyToggleMenuAction->isChecked() && showMainWindowMenuAction != nullptr &&
+                showMainWindowMenuAction->isVisible() &&
+                !showMainWindowMenuAction->icon().isNull() && restartMenuAction != nullptr &&
+                !restartMenuAction->isVisible() && !restartMenuAction->isCheckable() &&
+                !restartMenuAction->icon().isNull() && exitMenuAction != nullptr &&
+                exitMenuAction->isVisible() && !exitMenuAction->icon().isNull() &&
+                windowGroupMenuAction != nullptr && windowGroupMenuAction->isVisible() &&
+                actionForId(QStringLiteral("tray.window-grouping")) == windowGroupMenuAction &&
+                defaultVisibleActions.contains(hotkeyToggleMenuAction) &&
+                defaultVisibleActions.contains(showMainWindowMenuAction) &&
+                defaultVisibleActions.indexOf(windowGroupMenuAction) ==
+                    defaultVisibleActions.indexOf(showMainWindowMenuAction) - 1,
+            "the tray menu should expose the twelve default options in five catalog groups");
     requireActionText(screenshotMenuAction, QStringLiteral("Screenshot"),
                       "Screenshot should use its catalog label");
 #ifdef Q_OS_MACOS

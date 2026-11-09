@@ -3034,14 +3034,11 @@ void compactTrayManifestMatchesRegistryCatalog() {
     auto filteredProjectedGroups = projectedGroups;
     for (auto& group : filteredProjectedGroups) {
         group.options.removeIf([](const settings::SettingsTrayMenuOptionDefinition& option) {
-            return option.shortcutAction ==
-                       presentation::GlobalShortcutAction::ScreenRecord ||
-                   option.shortcutAction ==
-                       presentation::GlobalShortcutAction::ScreenRecordCopy ||
+            return option.shortcutAction == presentation::GlobalShortcutAction::ScreenRecord ||
+                   option.shortcutAction == presentation::GlobalShortcutAction::ScreenRecordCopy ||
                    option.shortcutAction ==
                        presentation::GlobalShortcutAction::OpenScreenRecordingFolder ||
-                   option.shortcutAction ==
-                       presentation::GlobalShortcutAction::PinSelectedFiles;
+                   option.shortcutAction == presentation::GlobalShortcutAction::PinSelectedFiles;
         });
     }
     const auto& comparisonGroups = filteredProjectedGroups;

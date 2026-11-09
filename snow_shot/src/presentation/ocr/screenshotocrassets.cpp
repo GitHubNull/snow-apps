@@ -462,7 +462,8 @@ bool validateBundledRuntime(const QString& directory, const Descriptor& descript
         if (!file.open(QIODevice::ReadOnly))
             return false;
         const QByteArray header = file.read(32);
-        if (header.size() != 32 || header.first(6) != QByteArray::fromHex("7f454c4602" "01")) {
+        if (header.size() != 32 || header.first(6) != QByteArray::fromHex("7f454c4602"
+                                                                          "01")) {
             return false;
         }
         if (qFromLittleEndian<quint16>(reinterpret_cast<const uchar*>(header.constData()) + 18) !=

@@ -1011,9 +1011,9 @@ void ocrProcessLifecycleTests() {
                 "missing resources must postpone resident startup without blocking the caller");
         require(QFile::copy(QCoreApplication::applicationFilePath(), delayedOptions.processPath),
                 "delayed runtime fixture must become available");
-        require(QFile::setPermissions(delayedOptions.processPath,
-                                      QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                          QFileDevice::ExeOwner),
+        require(QFile::setPermissions(delayedOptions.processPath, QFileDevice::ReadOwner |
+                                                                      QFileDevice::WriteOwner |
+                                                                      QFileDevice::ExeOwner),
                 "delayed runtime fixture must be executable");
         require(
             waitUntil([&] { return service.processId() != 0; }),

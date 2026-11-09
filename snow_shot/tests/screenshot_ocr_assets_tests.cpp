@@ -59,12 +59,12 @@ const QByteArray kOtherMacHeader = QByteArray::fromHex("cffaedfe0c000001") + QBy
 #ifdef Q_OS_LINUX
 #if defined(Q_PROCESSOR_ARM_64)
 const QString kLinuxPlatform = QStringLiteral("linux-arm64");
-const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0')
-                                    + QByteArray::fromHex("b700") + QByteArray(12, '\0');
+const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0') +
+                                QByteArray::fromHex("b700") + QByteArray(12, '\0');
 #else
 const QString kLinuxPlatform = QStringLiteral("linux-x64");
-const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0')
-                                    + QByteArray::fromHex("3e00") + QByteArray(12, '\0');
+const QByteArray kLinuxHeader = QByteArray::fromHex("7f454c460201") + QByteArray(12, '\0') +
+                                QByteArray::fromHex("3e00") + QByteArray(12, '\0');
 #endif
 #endif
 void require(bool condition, const char* message) {
