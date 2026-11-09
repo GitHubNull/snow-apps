@@ -24,6 +24,8 @@ Phase 2 builds:
 - `snow_draw_engine_qt_canvas` and its Rust `snow_draw_engine_c` core
 - `snow_image_viewer` and `snow_image_edit_worker`
 - `snow_shot`, its Rust `snow_shot_rust_ffi` bundle, and the FFmpeg static link
+- `snow_ocr_process` (nightly `simd-paddle-ocr-rs` submodule) and the bundled
+  `assets/ocr` manifest with the recognition models
 
 ## Prerequisites
 
@@ -189,7 +191,7 @@ entries on Linux. When the desktop provides a StatusNotifier host, the tray
 icon registers and the tray menu is available; on desktops without a tray or
 StatusNotifier host, only the floating toolbar, the main window, and the
 global shortcuts remain. The tray menu hides the commands that cannot run on
-Linux (recording, OCR/translation family) instead of listing dead items.
+Linux (recording) instead of listing dead items.
 
 Verify the clipboard and the saved file independently:
 
@@ -332,16 +334,23 @@ and minimal QPA platforms used by tests do not trip the gate.
 - Screen recording and audio/video export are disabled on Linux
   (`FeatureFamily::ScreenRecording` returns false); the native capture backends
   only exist for Windows and macOS.
-- OCR, translation, QR code, table, and LaTeX recognition are unavailable. The
-  toolbar hides those tools because `snow_ocr_process` is not built on Linux
-  (its Rust workspace depends on the uninitialized `simd-paddle-ocr-rs`
-  submodule).
-- Smart selection, window selection, and scrolling capture depend on native or
-  Rust backends that are not built on Linux; scrolling capture is hidden and the
-  remaining selection runs through the non-native overlay path. Live (continuously
-  updating) pinned window capture is unavailable: `liveWindowTargetAtPoint`
-  returns `nullopt` and the pin-window action reports that no capturable window was
-  found.
+- Text recognition, text translation, QR code, table, and LaTeX recognition are
+  available through the bundled OCR worker (`snow_ocr_process`, built from the
+  `simd-paddle-ocr-rs` nightly submodule and staged next to the app binary with
+  its models under `assets/ocr`). Translation, table, and LaTeX run on the
+  configured Snow Shot server; the default `linux-debug` preset points at
+  `http://localhost:8080`, so set `api_configuration/server_url` (or use the
+  release presets) for production. Translate-selected-text stays disabled:
+  `snow-selected-text` has no Linux backend.
+- Scrolling capture runs through a Qt frame source (root-window grab cropped to
+  the physical selection) plus XTest wheel dispatch, and excludes the selection
+  from the overlay's X input shape. It has no per-window capture exclusion, so
+  avoid overlapping other Snow Shot windows (for example the scrolling
+  thumbnail) with the selection when stitching.
+- Smart selection and window selection depend on native backends that are not
+  built on Linux. Live (continuously updating) pinned window capture is
+  unavailable: `liveWindowTargetAtPoint` returns `nullopt` and the pin-window
+  action reports that no capturable window was found.
 - Global mouse gestures fall back to the unsupported backend. Global keyboard
   shortcuts work through `XGrabKey` on X11 sessions.
 - Wayland sessions are detected and the screenshot feature family is gated off

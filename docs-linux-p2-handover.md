@@ -6,6 +6,20 @@
 - 本文目标：让接手代理在 Linux 上补齐**文本识别、文本翻译、滚动截图**（用户明确要求的三项），可选 QR/表格/LaTeX 识别
 - 先读 `docs-linux-handover.md`（环境、验收手册、禁区）与 `docs-linux-build.md`（构建/现状）
 
+## 完成状态（2026-11-10）
+
+P2-A 全部完成并真机验收通过；P2-B 代码全部落地，真机滚动验收待解锁屏幕后补做。
+
+- A1 OCR worker Linux 编译：`snow_ocr_process` 在 `linux-debug` 下构建，`--version` 输出 `linux-x86_64 protocol 7`；子模块 nightly clippy 零告警（提交 `95baefe8`、`e3938333` 系列）
+- A2 OCR 资产 bundled 分发：`scripts/snow-shot-linux-ocr.py` + schema-3 `assets/ocr` manifest（`platform=linux-x64`），`core.tests` 与 asset 单测通过（`aac514e2`、`6357f0e8`）
+- A3 运行时门禁解除：托盘/快捷键/工具栏恢复 OCR、翻译、QR/表格/LaTeX 入口；TranslateSelectedText 保持禁用（`e3938333`）
+- A4 真机验收：OCR 中文识别、翻译（生产 API `snowshot.top`）、QR 解码、表格提取、LaTeX 提取全部通过；损坏 manifest 快速失败并按平台给出重装提示（修复了 Linux 误报 "for this Mac" 的文案缺陷，`93389ad0`）
+- B1 Qt 滚动帧源：根窗口抓取 + 物理选区裁剪 + 容量 1 帧邮箱 + 重复判定，offscreen 测试 `snow-shot-scrolling-qt-source-tests`（`54df387a`）
+- B2 XTest 滚轮 + XShape 输入排除：`snow_shot/src/platform/linux/scrollinput.cpp`、`x11inputregion.cpp`；自动滚动失败与 macOS 同样上报 capture error（`9a96a759`）
+- B3 工具栏放开滚动截图入口（`91b0123d`）；**overlay 帧污染真机核查待做**
+- B4 真机滚动拼接验收、安装树裸跑验收**待做**（验收窗口期机器锁屏，需用户解锁后补）
+- 拆分记录：`snow-shot-scrolling-capture-exclusion-tests` 仅保留在仍使用原生流的平台（Windows/macOS）；Linux 由新的 Qt source 测试覆盖
+
 ## 0. 硬规则（与 P0/P1 阶段一致）
 
 1. 只跑与改动相关的 `ctest -R` 过滤测试，**禁止全量测试**（除非用户明确要求）。

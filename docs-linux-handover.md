@@ -9,7 +9,7 @@
 
 ## 0. 给接手代理的第一段话
 
-Linux 适配已经完成阶段 0-3：Snow Image Viewer 和 Snow Shot 的“选区截图 → 标注 → 复制/保存 → 静态贴图”核心链路、X11 全局快捷键、直连截屏（当前显示器/聚焦窗口/MCP）、XFixes 光标合成、自身窗口排除、Wayland 检测与提示、安装树（含捆绑 Qt 与 `.desktop`）均已实现并通过自动化测试。**不要重做已完成部分**，剩余工作只剩：解锁桌面后的真人 UI 复验（见 §8 清单）、P1-E（剪贴板/输入法验证）与 P2 功能缺位（默认不做）。
+Linux 适配已经完成阶段 0-3，P2（OCR/翻译/识别族 + 滚动截图）也已实现：Snow Image Viewer 和 Snow Shot 的“选区截图 → 标注 → 复制/保存 → 静态贴图”核心链路、X11 全局快捷键、直连截屏（当前显示器/聚焦窗口/MCP）、XFixes 光标合成、自身窗口排除、Wayland 检测与提示、安装树（含捆绑 Qt 与 `.desktop`）均已实现并通过自动化测试。**不要重做已完成部分**，剩余工作只剩：解锁桌面后的真人 UI 复验（见 §8 清单）、P1-E（剪贴板/输入法验证）与滚动截图/安装树的真机收尾（见 `docs-linux-p2-handover.md`）。
 
 开始前请先读完本文和 `docs-linux-build.md`。硬性规则：
 
@@ -68,12 +68,13 @@ Linux 适配已经完成阶段 0-3：Snow Image Viewer 和 Snow Shot 的“选�
 ### 1.3 明确不可用或未实现
 
 - 录屏（`FeatureFamily::ScreenRecording` 在 Linux 返回 false）。
-- OCR、翻译、二维码、表格、LaTeX（OCR 子模块未初始化，`snow_ocr_process` 不构建）。
-- 智能选区、窗口选区、滚动截图、实时贴图窗口。
+- 智能选区、窗口选区、实时贴图窗口、划词翻译（`snow-selected-text` 无 Linux 后端）。
 - 全局鼠标手势（`UnsupportedGlobalMouseBackend`）；全局键盘快捷键已可用（`XGrabKey`）。
 - 自动更新、Crashpad 崩溃上报、打印、AirDrop。
 - Wayland：已做检测与提示（功能门禁 + 启动警告），但 Wayland 原生截屏未实现；多显示器/混合 DPI 有几何测试覆盖，真人多屏复验待解锁桌面。
 - DEB/RPM/AppImage 等发行级打包未做（`cmake --install` 树已可用）。
+
+> P2（2026-11-10）：OCR/翻译/QR/表格/LaTeX 与滚动截图已补齐，见 `docs-linux-p2-handover.md` 的完成状态一节。
 
 ## 2. 快速开始
 
@@ -124,9 +125,9 @@ Viewer 测试（仅在改到 viewer 时运行）：
 | `snow_shot/src/platform/linux/livewindownative.cpp` | 桩：实时窗口目标返回 `nullopt`，工厂返回 `nullptr` |
 | `snow_shot/src/app/featureavailability.cpp` | Linux 仅关闭 `ScreenRecording`；其他 feature 仍可用 |
 | `snow_shot/src/app/main.cpp` | Linux 启动默认显示主窗口（`--autostart` 除外）；更新器/Crashpad 仅 Windows |
-| `snow_shot/src/presentation/toolbar/screenshottoolbarwindow.cpp` | Linux 隐藏 OCR/翻译/表格/二维码/滚动/录屏按钮 |
-| `snow_shot/src/presentation/toolbar/screenshottoolbarpresentationstatefactory.cpp` | Linux `ocrAvailable = false` |
-| `snow_shot/src/presentation/ocr/screenshotocrrecognitionservice.cpp` | Linux `prepareAssets()` 立即失败，不进入重试循环 |
+| `snow_shot/src/presentation/toolbar/screenshottoolbarwindow.cpp` | Linux 显示 OCR/翻译/表格/二维码/滚动截图按钮；仅隐藏录屏按钮 |
+| `snow_shot/src/presentation/toolbar/screenshottoolbarpresentationstatefactory.cpp` | 平台中性：`ocrAvailable` 按 OCR 资源/会话状态计算（P2 已移除 Linux 早退） |
+| `snow_shot/src/presentation/ocr/screenshotocrrecognitionservice.cpp` | 平台中性：bundled 资产在 Linux 走 schema-3 manifest，失败信息按平台分支（P2） |
 | `cmake/SnowShotLinux.cmake` | FFmpeg 静态闭包：`pkg_check_modules(... IMPORTED_TARGET GLOBAL)` + `PKG_CONFIG_ARGN --static`，同时挂到 Rust FFI 接口目标和 `snow_shot` |
 | `cmake/RustStaticLibrary.cmake` | 无系统 `clang` 时给 bindgen 加 `CPATH` 回退（约 230-280 行） |
 | `cmake/SnowRustLibclang.cmake` | 非 Windows libclang 发现顺序：`LIBCLANG_PATH` → venv `clang/native` → 系统 LLVM 目录 |
@@ -337,7 +338,9 @@ Viewer 测试（仅在改到 viewer 时运行）：
 
 ### P2 功能缺位（默认不做）
 
-录屏、OCR/翻译/二维码/表格/LaTeX、智能选区、窗口选区、滚动截图、实时贴图、打印/AirDrop、自动更新、Crashpad、安装包之外的发行渠道。除非用户明确要求，否则只做“隐藏/明确提示”，不要实现半成品。
+> 状态（2026-11-10）：P2 已按用户要求完成 OCR/翻译/QR/表格/LaTeX 与滚动截图，见 `docs-linux-p2-handover.md`。以下清单仅剩这些仍未实现：
+
+录屏、智能选区、窗口选区、实时贴图、划词翻译、打印/AirDrop、自动更新、Crashpad、安装包之外的发行渠道。除非用户明确要求，否则只做“隐藏/明确提示”，不要实现半成品。
 
 ## 5. 环境与坑（必读）
 

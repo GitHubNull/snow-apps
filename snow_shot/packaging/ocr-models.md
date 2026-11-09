@@ -100,6 +100,15 @@ the relative `Contents/MacOS/assets` resource link. Hashes are finalized after
 Mach-O deployment and nested signing, before signing the outer app. Native
 macOS and ARM64 checks remain necessary before publication.
 
+Linux x64 builds follow the macOS bundled pattern. `scripts/snow-shot-linux-ocr.py
+stage` hashes the built worker (ELF) and the model cache, then writes a schema-3
+manifest with `platform=linux-x64` and `delivery=bundled` into
+`<binary-dir>/assets/ocr`; the CMake `*-ocr-assets` staging targets regenerate it
+on every build, and `cmake --install` copies it to `bin/assets/ocr`. Startup
+validates the ELF header, sizes, model files, and the manifest before launching
+the worker. The worker alone builds with the pinned nightly toolchain; GPU
+acceleration stays off on Linux (no `gpu` feature), so inference is CPU-only.
+
 ## Focused verification
 
 Run only affected worker, library, OCR assets/lifecycle/recognition, settings,
