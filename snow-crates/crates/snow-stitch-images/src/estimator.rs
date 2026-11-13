@@ -98,13 +98,11 @@ fn round_coordinate(value: f32) -> i32 {
 }
 
 fn hamming_distance(left: &[u8; 32], right: &[u8; 32]) -> u32 {
-    left.chunks_exact(8)
-        .zip(right.chunks_exact(8))
-        .map(|(left, right)| {
-            (u64::from_ne_bytes(left.try_into().expect("eight-byte descriptor word"))
-                ^ u64::from_ne_bytes(right.try_into().expect("eight-byte descriptor word")))
-            .count_ones()
-        })
+    left.as_chunks::<8>()
+        .0
+        .iter()
+        .zip(right.as_chunks::<8>().0)
+        .map(|(left, right)| (u64::from_ne_bytes(*left) ^ u64::from_ne_bytes(*right)).count_ones())
         .sum()
 }
 

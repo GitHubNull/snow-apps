@@ -22,6 +22,7 @@ pub struct QueryResult {
     pub reason: StopReason,
 }
 
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 pub struct QueryControl<'a> {
     pub(crate) budget: Duration,
     pub(crate) call_limit: Duration,

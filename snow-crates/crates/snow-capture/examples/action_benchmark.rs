@@ -446,6 +446,7 @@ fn parse_window_handle(raw: &str) -> Result<isize> {
     Ok(parsed_u64 as isize)
 }
 
+#[cfg(target_os = "windows")]
 fn window_under_cursor() -> Result<WindowId> {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -465,6 +466,11 @@ fn window_under_cursor() -> Result<WindowId> {
     let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
     let handle = if root.0.is_null() { hwnd } else { root };
     Ok(WindowId::from_windows_handle(handle.0 as isize))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn window_under_cursor() -> Result<WindowId> {
+    bail!("--window-under-cursor requires Windows")
 }
 
 fn parse_region_csv(raw: &str) -> Result<CaptureRegion> {

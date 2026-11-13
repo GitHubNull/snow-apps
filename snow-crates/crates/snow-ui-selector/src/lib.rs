@@ -69,6 +69,7 @@ pub struct ElementRect {
     rect: PixelRect,
 }
 impl ElementRect {
+    #[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
     pub(crate) fn new(rect: impl Into<PixelRect>) -> Self {
         Self { rect: rect.into() }
     }

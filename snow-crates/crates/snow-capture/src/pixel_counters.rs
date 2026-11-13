@@ -33,6 +33,8 @@ impl PixelCounters {
     }
 }
 
+/// Only the Windows backends read pixels back to the host.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn readback() {
     READBACKS.fetch_add(1, Ordering::Relaxed);
 }

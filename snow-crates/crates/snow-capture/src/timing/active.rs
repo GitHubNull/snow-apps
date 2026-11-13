@@ -2,6 +2,7 @@
 //! feature.
 
 use std::cell::RefCell;
+#[cfg(target_os = "windows")]
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -18,6 +19,7 @@ pub struct StageTiming {
 }
 
 struct StageRecorder {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     last_mark: Instant,
     timings: Vec<StageTiming>,
 }
@@ -33,10 +35,14 @@ thread_local! {
 /// Dropping the scope without calling [`StageScope::finish`] discards the
 /// entries and uninstalls the recorder, so early error returns and unwinds
 /// cannot leak recorder state into later captures on the same thread.
+// Only the Windows capture backends install stage scopes; Linux keeps the
+// shared no-op recording helpers from this module.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) struct StageScope {
     installed: bool,
 }
 
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 impl StageScope {
     /// Install a recorder for one capture call when `enabled` is `true`.
     pub(crate) fn enter(enabled: bool) -> Self {
@@ -83,6 +89,7 @@ impl Drop for StageScope {
 }
 
 /// Attach the scope's recorded entries to a frame's metadata.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn attach_stage_timings(frame: &mut Frame, scope: StageScope) {
     frame.metadata.stage_timings = scope.finish();
 }
@@ -93,6 +100,7 @@ pub(crate) fn stage_recording() -> bool {
 }
 
 /// Close the span from the previous mark (or scope entry) until now.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn stage_mark(name: &'static str) {
     STAGE_RECORDER.with_borrow_mut(|slot| {
         let Some(recorder) = slot.as_mut() else {

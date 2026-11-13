@@ -13,7 +13,8 @@ pub fn swap_red_blue(bytes: &mut [u8]) {
     swap_scalar(bytes);
 }
 fn swap_scalar(bytes: &mut [u8]) {
-    for pixel in bytes.chunks_exact_mut(4) {
+    let (pixels, _) = bytes.as_chunks_mut::<4>();
+    for pixel in pixels {
         pixel.swap(0, 2);
     }
 }
@@ -35,7 +36,9 @@ pub fn copy_swap_red_blue(source: &[u8], destination: &mut [u8]) {
 }
 
 fn copy_swap_scalar(source: &[u8], destination: &mut [u8]) {
-    for (src, dst) in source.chunks_exact(4).zip(destination.chunks_exact_mut(4)) {
+    let (source_pixels, _) = source.as_chunks::<4>();
+    let (destination_pixels, _) = destination.as_chunks_mut::<4>();
+    for (src, dst) in source_pixels.iter().zip(destination_pixels) {
         dst[0] = src[2];
         dst[1] = src[1];
         dst[2] = src[0];
@@ -62,8 +65,8 @@ unsafe fn copy_swap_neon(source: &[u8], destination: &mut [u8], length: usize) {
 #[cfg(target_arch = "aarch64")]
 unsafe fn swap_neon(bytes: &mut [u8]) {
     use std::arch::aarch64::*;
-    let mut chunks = bytes.chunks_exact_mut(64);
-    for chunk in &mut chunks {
+    let (chunks, remainder) = bytes.as_chunks_mut::<64>();
+    for chunk in chunks {
         unsafe {
             let rgba = vld4q_u8(chunk.as_ptr());
             vst4q_u8(
@@ -72,7 +75,7 @@ unsafe fn swap_neon(bytes: &mut [u8]) {
             );
         }
     }
-    swap_scalar(chunks.into_remainder());
+    swap_scalar(remainder);
 }
 #[cfg(test)]
 mod tests {

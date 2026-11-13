@@ -1249,7 +1249,7 @@ fn orb_pattern() -> &'static [(i8, i8)] {
     PATTERN
         .get_or_init(|| {
             let mut bytes = Vec::with_capacity(1024);
-            for chunk in ORB_PATTERN_BASE64.as_bytes().chunks_exact(4) {
+            for chunk in ORB_PATTERN_BASE64.as_bytes().as_chunks::<4>().0 {
                 let first = base64_value(chunk[0]);
                 let second = base64_value(chunk[1]);
                 bytes.push((first << 2) | (second >> 4));
@@ -1263,8 +1263,9 @@ fn orb_pattern() -> &'static [(i8, i8)] {
                 }
             }
             assert_eq!(bytes.len(), 1024);
-            bytes
-                .chunks_exact(2)
+            let (points, _) = bytes.as_chunks::<2>();
+            points
+                .iter()
                 .map(|point| (point[0] as i8, point[1] as i8))
                 .collect()
         })

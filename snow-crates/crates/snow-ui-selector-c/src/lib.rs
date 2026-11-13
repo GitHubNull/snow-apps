@@ -1,4 +1,7 @@
 //! Asynchronous selector boundary. Each worker owns all of its native state.
+// The selector service only exists on Windows and macOS; the crate compiles to
+// an empty library elsewhere and is not linked into Linux products.
+#![cfg(any(windows, target_os = "macos"))]
 use snow_ui_selector::{
     AccessibilityBackend, ElementRegionService, HitTestMode, Point, QueryControl, QueryResult,
     SelectorResult, StopReason, WindowSnapshot,

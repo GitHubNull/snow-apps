@@ -6,8 +6,10 @@ use snow_memory::RasterBuffer;
 use crate::StitchError;
 
 fn rgba_visible_equal_scalar(left: &[u8], right: &[u8]) -> bool {
-    left.chunks_exact(4)
-        .zip(right.chunks_exact(4))
+    let (left, _) = left.as_chunks::<4>();
+    let (right, _) = right.as_chunks::<4>();
+    left.iter()
+        .zip(right)
         .all(|(left, right)| left[..3] == right[..3])
 }
 
@@ -721,7 +723,8 @@ mod tests {
     fn encode_png_preserves_page_backed_rgba_pixels() {
         let directory = tempfile::tempdir().unwrap();
         let mut pixels = RasterBuffer::zeroed(snow_memory::MIN_PAGE_BUFFER_BYTES);
-        for pixel in pixels.chunks_exact_mut(4) {
+        let (pixel_chunks, _) = pixels.as_chunks_mut::<4>();
+        for pixel in pixel_chunks {
             pixel.copy_from_slice(&[45, 123, 200, 64]);
         }
         let pointer = pixels.as_ptr();
@@ -774,7 +777,8 @@ mod tests {
         }
         let directory = tempfile::tempdir().unwrap();
         let mut pixels = RasterBuffer::zeroed(snow_memory::MIN_PAGE_BUFFER_BYTES);
-        for pixel in pixels.chunks_exact_mut(4) {
+        let (pixel_chunks, _) = pixels.as_chunks_mut::<4>();
+        for pixel in pixel_chunks {
             pixel.copy_from_slice(&[45, 123, 200, 0]);
         }
         let pointer = pixels.as_ptr();
@@ -798,11 +802,8 @@ mod tests {
         let pixels = frame.into_buffer();
         assert_eq!(pixels.as_ptr(), pointer);
         assert_eq!(pixels.is_page_backed(), page_backed);
-        assert!(
-            pixels
-                .chunks_exact(4)
-                .all(|pixel| pixel == [45, 123, 200, 0])
-        );
+        let (pixel_chunks, _) = pixels.as_chunks::<4>();
+        assert!(pixel_chunks.iter().all(|pixel| pixel == &[45, 123, 200, 0]));
     }
 
     #[test]

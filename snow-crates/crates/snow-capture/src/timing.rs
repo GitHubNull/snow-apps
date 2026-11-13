@@ -29,9 +29,11 @@ mod inert;
 pub use active::StageTiming;
 
 #[cfg(feature = "stage-timing")]
+pub(crate) use active::{stage_checkpoint, stage_record, stage_record_since};
+
+#[cfg(all(windows, feature = "stage-timing"))]
 pub(crate) use active::{
-    StageScope, attach_stage_timings, qpc_duration_between, qpc_ticks_to_duration,
-    stage_checkpoint, stage_record, stage_record_since, stage_recording,
+    StageScope, attach_stage_timings, qpc_duration_between, qpc_ticks_to_duration, stage_recording,
 };
 
 #[cfg(not(feature = "stage-timing"))]

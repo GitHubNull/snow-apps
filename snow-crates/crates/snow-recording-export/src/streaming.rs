@@ -1843,6 +1843,8 @@ impl StreamingEncoder {
             };
             #[cfg(windows)]
             let stage = "encode.gpu_send";
+            #[cfg(not(any(windows, target_os = "macos")))]
+            let stage = "encode.gpu_send";
             self.report.timings.record(stage, send_started);
         }
         #[cfg(feature = "bench-timing")]
@@ -1851,6 +1853,8 @@ impl StreamingEncoder {
             let native_submission = self.native_input.is_some();
             #[cfg(windows)]
             let native_submission = true;
+            #[cfg(not(any(windows, target_os = "macos")))]
+            let native_submission = false;
             if native_submission {
                 self.report.timings.gpu_surface_submissions += 1;
             }
