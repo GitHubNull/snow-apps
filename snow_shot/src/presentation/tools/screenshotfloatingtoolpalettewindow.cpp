@@ -18,11 +18,15 @@
 #include "widgets/detail/window_surface_mac_p.h"
 #include "snow_shot/platform/screenshotnative.h"
 #endif
+#if defined(Q_OS_LINUX)
+#include "snow_shot/platform/linux/x11inputregion.h"
+#endif
 #include "widgets/select.h"
 #include "icon_renderer.h"
 
 #include <QAbstractSpinBox>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QHideEvent>
 #include <QJsonValue>
 #include <QLineEdit>
@@ -312,6 +316,8 @@ void ScreenshotFloatingToolPaletteWindow::releaseNativeSurface() {
     // Keep the palette QObject graph and all signal wiring reusable while
     // releasing the native window, child native surfaces, and backing store.
     destroy(true, true);
+    // A recreated native window starts with the default full input shape.
+    m_nativeInputRegionApplied = false;
 }
 
 void ScreenshotFloatingToolPaletteWindow::restoreNativeSurface() {
@@ -589,6 +595,9 @@ void ScreenshotFloatingToolPaletteWindow::showEvent(QShowEvent* event) {
     } else {
         refreshPaletteWindow(true);
     }
+    // Cover the first show and any content or DPR change that happened while
+    // the window was hidden.
+    updateWindowMask();
 }
 
 void ScreenshotFloatingToolPaletteWindow::paintEvent(QPaintEvent* event) {
@@ -686,9 +695,16 @@ bool ScreenshotFloatingToolPaletteWindow::isPointInInteractiveContent(
         return true;
     }
 
-    const QRegion interactiveRegion =
-        m_paletteHost->interactiveHostRegion().translated(m_paletteHost->pos());
-    return interactiveRegion.contains(localPosition);
+    return paletteWindowInputRegion().contains(localPosition);
+}
+
+QRegion ScreenshotFloatingToolPaletteWindow::paletteWindowInputRegion() const {
+    if (m_paletteHost == nullptr) {
+        return rect();
+    }
+    return m_paletteHost->interactiveHostRegion()
+        .translated(m_paletteHost->pos())
+        .intersected(rect());
 }
 
 void ScreenshotFloatingToolPaletteWindow::handlePaletteContentChange() {
@@ -1149,6 +1165,25 @@ void ScreenshotFloatingToolPaletteWindow::updateWindowMask() {
     }
     if (isVisible()) {
         adqt::widgets::detail::updateMacWindowSurfaceShadow(this);
+    }
+#elif defined(Q_OS_LINUX)
+    if (m_paletteHost == nullptr || QGuiApplication::platformName() != QStringLiteral("xcb")) {
+        return;
+    }
+    // X11 has no WM_NCHITTEST equivalent. Exclude the transparent frame margins
+    // and panel gaps from the input shape so presses reach the selection border
+    // underneath, while ShapeBounding stays intact and keeps the painted shadow.
+    const QRegion region = paletteWindowInputRegion();
+    const qreal devicePixelRatio = devicePixelRatioF();
+    if (m_nativeInputRegionApplied && m_lastAppliedNativeInputRegion == region &&
+        qFuzzyCompare(m_lastAppliedNativeInputRegionDevicePixelRatio + 1.0,
+                      devicePixelRatio + 1.0)) {
+        return;
+    }
+    if (snow_shot::platform::x11::setWindowInputRegion(this, region)) {
+        m_lastAppliedNativeInputRegion = region;
+        m_lastAppliedNativeInputRegionDevicePixelRatio = devicePixelRatio;
+        m_nativeInputRegionApplied = true;
     }
 #endif
 }

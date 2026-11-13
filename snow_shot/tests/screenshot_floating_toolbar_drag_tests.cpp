@@ -33,6 +33,7 @@
 #include <QPointer>
 #include <QPoint>
 #include <QRect>
+#include <QRegion>
 #include <QScreen>
 #include <QSize>
 #include <QString>
@@ -128,6 +129,10 @@ class ScreenshotFloatingToolPaletteWindowTestAccess {
     static bool isPointInInteractiveContent(const ScreenshotFloatingToolPaletteWindow& window,
                                             const QPoint& localPosition) {
         return window.isPointInInteractiveContent(localPosition);
+    }
+
+    static QRegion paletteWindowInputRegion(const ScreenshotFloatingToolPaletteWindow& window) {
+        return window.paletteWindowInputRegion();
     }
 };
 
@@ -655,6 +660,53 @@ void recordingExportSettingsParticipateInNativeHitTesting() {
                 ScreenshotFloatingToolPaletteWindowTestAccess::isPointInInteractiveContent(
                     window, cursorCenter),
             "native hit-testing should retain clicks over every Export Settings control");
+}
+
+void floatingToolbarInputRegionMatchesVisibleContent() {
+    NoOpToolbarCommands commands;
+    ScreenshotToolbarWindow window(commands);
+    window.setToolbarSize(QStringLiteral("normal"));
+    window.prepareForDisplay();
+    window.show();
+    settleQueuedRefreshes();
+
+    const QRegion region =
+        ScreenshotFloatingToolPaletteWindowTestAccess::paletteWindowInputRegion(window);
+    require(!region.isEmpty(), "the floating toolbar must always keep an interactive input region");
+
+    ScreenshotToolPalette* palette = window.palette();
+    require(palette != nullptr && palette->mainPanel() != nullptr,
+            "the floating toolbar fixture should expose its main panel");
+    const auto centerInWindow = [&window](const QWidget* widget) {
+        return widget->mapTo(&window, QPoint(widget->width() / 2, widget->height() / 2));
+    };
+    require(region.contains(centerInWindow(palette->mainPanel())),
+            "the main toolbar panel must accept input");
+
+    const QMargins margins = ScreenshotToolPaletteHost::defaultShadowMargins();
+    if (margins.top() > 0) {
+        require(!region.contains(QPoint(window.width() / 2, margins.top() / 2)),
+                "the transparent frame band above the panels must pass input to the selection "
+                "border underneath");
+    }
+    if (margins.left() > 0 && margins.top() > 0) {
+        require(!region.contains(QPoint(margins.left() / 2, margins.top() / 2)),
+                "transparent frame corners must pass input through");
+    }
+    if (margins.bottom() > 0) {
+        require(!region.contains(QPoint(window.width() / 2, window.height() - 1)),
+                "the transparent frame band below the panels must pass input through");
+    }
+
+    palette->setActiveTool(ScreenshotToolPalette::Tool::Shape);
+    settleQueuedRefreshes();
+    require(palette->styleToolbarVisible() && palette->stylePanel() != nullptr &&
+                palette->stylePanel()->isVisible(),
+            "the shape tool should expose the style toolbar");
+    const QRegion styledRegion =
+        ScreenshotFloatingToolPaletteWindowTestAccess::paletteWindowInputRegion(window);
+    require(styledRegion.contains(centerInWindow(palette->stylePanel())),
+            "the style toolbar panel must accept input");
 }
 
 void settleQueuedRefreshes() {
@@ -3209,6 +3261,10 @@ int main(int argc, char* argv[]) {
         }
         if (app.arguments().contains(QStringLiteral("--recording-hit-test-only"))) {
             recordingExportSettingsParticipateInNativeHitTesting();
+            return 0;
+        }
+        if (app.arguments().contains(QStringLiteral("--input-region-only"))) {
+            floatingToolbarInputRegionMatchesVisibleContent();
             return 0;
         }
         if (app.arguments().contains(QStringLiteral("--native-surface-lifecycle-only"))) {

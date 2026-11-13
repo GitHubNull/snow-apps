@@ -9,6 +9,7 @@
 #include <QPointF>
 #include <QPointer>
 #include <QRect>
+#include <QRegion>
 #include <QSize>
 #include <QWidget>
 
@@ -106,6 +107,7 @@ class ScreenshotFloatingToolPaletteWindow : public QWidget {
     void refreshPaletteWindow(bool forceRepaint = false);
     bool handleNativeHitTest(void* message, qintptr* result) const;
     bool isPointInInteractiveContent(const QPoint& localPosition) const;
+    QRegion paletteWindowInputRegion() const;
     void handlePaletteContentChange();
     bool applyPlacementScreen();
     void ensureReferenceDevicePixelRatio();
@@ -161,6 +163,9 @@ class ScreenshotFloatingToolPaletteWindow : public QWidget {
     QSize m_lastAppliedWindowSize;
     QPoint m_lastAppliedContentOffset;
     QRect m_lastAppliedMainToolbarContentRect;
+    QRegion m_lastAppliedNativeInputRegion;
+    qreal m_lastAppliedNativeInputRegionDevicePixelRatio = 0.0;
+    bool m_nativeInputRegionApplied = false;
     bool m_draggingPalette = false;
     bool m_lastRequestedContentPositionValid = false;
     bool m_lastMainToolbarGlobalTopLeftValid = false;

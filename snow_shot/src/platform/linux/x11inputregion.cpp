@@ -5,6 +5,8 @@
 #include "snow_shot/platform/linux/x11inputregion.h"
 #include "snow_shot/platform/linux/x11connection.h"
 
+#include <QList>
+
 #include <X11/Xlib.h>
 #include <X11/extensions/shape.h>
 
@@ -22,9 +24,19 @@ XRectangle rectangle(int x, int y, int width, int height) {
     return XRectangle{static_cast<short>(x), static_cast<short>(y), extent(width), extent(height)};
 }
 
+XRectangle scaledRectangle(const QRect& rect, qreal scale) {
+    // Scale the edges instead of origin plus size so adjacent logical
+    // rectangles cannot open fractional-pixel gaps in the input shape.
+    const int left = qRound(rect.left() * scale);
+    const int top = qRound(rect.top() * scale);
+    const int right = qRound((rect.right() + 1) * scale);
+    const int bottom = qRound((rect.bottom() + 1) * scale);
+    return rectangle(left, top, right - left, bottom - top);
+}
+
 } // namespace
 
-bool setWindowInputHole(QWidget* widget, const QRect& hole) {
+bool setWindowInputRegion(QWidget* widget, const QRegion& region) {
     if (widget == nullptr) {
         return false;
     }
@@ -44,41 +56,33 @@ bool setWindowInputHole(QWidget* widget, const QRect& hole) {
     }
 
     const qreal scale = widget->devicePixelRatioF();
-    const QSize size = widget->size();
-    const QRect bounds(0, 0, qRound(size.width() * scale), qRound(size.height() * scale));
-    QRect holePixels;
-    if (!hole.isEmpty()) {
-        holePixels = QRect(qRound(hole.x() * scale), qRound(hole.y() * scale),
-                           qRound(hole.width() * scale), qRound(hole.height() * scale))
-                         .intersected(bounds);
-    }
-
-    XRectangle strips[4];
-    int count = 0;
-    if (holePixels.isEmpty()) {
-        strips[count++] = rectangle(0, 0, bounds.width(), bounds.height());
+    const QRegion bounded = region.intersected(widget->rect());
+    QList<XRectangle> rectangles;
+    if (bounded.isEmpty()) {
+        // An empty input shape would make every panel unreachable, so an
+        // empty region restores the full window.
+        rectangles.append(
+            rectangle(0, 0, qRound(widget->width() * scale), qRound(widget->height() * scale)));
     } else {
-        const int holeBottom = holePixels.bottom() + 1;
-        const int holeRight = holePixels.right() + 1;
-        if (holePixels.top() > 0) {
-            strips[count++] = rectangle(0, 0, bounds.width(), holePixels.top());
-        }
-        if (holeBottom < bounds.height()) {
-            strips[count++] =
-                rectangle(0, holeBottom, bounds.width(), bounds.height() - holeBottom);
-        }
-        if (holePixels.left() > 0) {
-            strips[count++] =
-                rectangle(0, holePixels.top(), holePixels.left(), holePixels.height());
-        }
-        if (holeRight < bounds.width()) {
-            strips[count++] = rectangle(holeRight, holePixels.top(), bounds.width() - holeRight,
-                                        holePixels.height());
+        for (const QRect& rect : bounded.rects()) {
+            rectangles.append(scaledRectangle(rect, scale));
         }
     }
-    XShapeCombineRectangles(display, window, ShapeInput, 0, 0, strips, count, ShapeSet, Unsorted);
+    XShapeCombineRectangles(display, window, ShapeInput, 0, 0, rectangles.data(),
+                            static_cast<int>(rectangles.size()), ShapeSet, Unsorted);
     XFlush(display);
     return true;
+}
+
+bool setWindowInputHole(QWidget* widget, const QRect& hole) {
+    if (widget == nullptr) {
+        return false;
+    }
+    QRegion region = widget->rect();
+    if (!hole.isEmpty()) {
+        region -= hole;
+    }
+    return setWindowInputRegion(widget, region);
 }
 
 } // namespace snow_shot::platform::x11

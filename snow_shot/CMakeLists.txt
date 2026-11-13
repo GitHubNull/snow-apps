@@ -195,6 +195,13 @@ function(snow_shot_link_macos_window_platform target)
         target_link_libraries(${target} PRIVATE snow_shot_macos_window_platform)
     endif()
 endfunction()
+
+# Floating palette windows apply their X11 input shape through this helper.
+function(snow_shot_link_linux_window_platform target)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(${target} PRIVATE snow_shot_linux_x11)
+    endif()
+endfunction()
 include(SnowTestCliGuard)
 include(SnowQtOffscreenTest)
 
@@ -5449,6 +5456,7 @@ if(SNOW_SHOT_BUILD_TESTS)
             COMPILE_OPTIONS /bigobj)
     endif()
     snow_shot_link_macos_window_platform(snow-shot-pinned-window-tests)
+    snow_shot_link_linux_window_platform(snow-shot-pinned-window-tests)
     target_include_directories(snow-shot-pinned-window-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-stitch-images-c/include"
@@ -7179,6 +7187,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         src/presentation/styles/themecolorscheme.cpp
     )
     snow_shot_link_macos_window_platform(snow-shot-screenshot-toolbar-remembered-tool-tests)
+    snow_shot_link_linux_window_platform(snow-shot-screenshot-toolbar-remembered-tool-tests)
     target_include_directories(snow-shot-screenshot-toolbar-remembered-tool-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
     )
@@ -7266,6 +7275,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         snow_shot_window_shortcuts snow_shot_storage snow_draw_engine_qt_canvas
         adqt_icon_core ant_design_icons_qt ant_design_qt Qt6::Widgets Qt6::GuiPrivate)
     snow_shot_link_macos_window_platform(snow-shot-global-canvas-tests)
+    snow_shot_link_linux_window_platform(snow-shot-global-canvas-tests)
     if(WIN32)
         target_sources(snow-shot-global-canvas-tests PRIVATE src/platform/windows/pinnedwindownative.cpp)
         target_link_libraries(snow-shot-global-canvas-tests PRIVATE Qt6::GuiPrivate comctl32)
@@ -7521,6 +7531,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         src/presentation/recording/recordingaudiogainpopover.h
     )
     snow_shot_link_macos_window_platform(snow-shot-screen-recording-shortcut-tests)
+    snow_shot_link_linux_window_platform(snow-shot-screen-recording-shortcut-tests)
     target_compile_definitions(snow-shot-screen-recording-shortcut-tests PRIVATE
         SNOW_SHOT_TEST_HOOKS=1
     )
@@ -7617,6 +7628,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         src/presentation/toolbar/screenshottoolbarwindow.cpp
     )
     snow_shot_link_macos_window_platform(snow-shot-floating-toolbar-drag-tests)
+    snow_shot_link_linux_window_platform(snow-shot-floating-toolbar-drag-tests)
     target_compile_definitions(snow-shot-floating-toolbar-drag-tests PRIVATE
         SNOW_SHOT_TEST_HOOKS=1
     )
@@ -7747,6 +7759,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-color-picker-lifecycle-tests --selection-toolbar-visibility-only -platform offscreen)
     set_tests_properties(snow-shot-selection-toolbar-visibility-tests PROPERTIES LABELS "unit" TIMEOUT 60)
     snow_shot_link_macos_window_platform(snow-shot-color-picker-lifecycle-tests)
+    snow_shot_link_linux_window_platform(snow-shot-color-picker-lifecycle-tests)
     target_compile_definitions(snow-shot-color-picker-lifecycle-tests PRIVATE
         SNOW_SHOT_BENCH_INTERNALS=1)
     target_include_directories(snow-shot-color-picker-lifecycle-tests PRIVATE include)
@@ -8209,6 +8222,10 @@ if(SNOW_SHOT_BUILD_TESTS)
     unset(_color_picker_lifecycle_sources)
 
     snow_shot_import_offscreen_platform(snow-shot-floating-toolbar-drag-tests)
+    add_test(NAME snow-shot-floating-toolbar-input-region-tests
+        COMMAND snow-shot-floating-toolbar-drag-tests --input-region-only -platform offscreen)
+    set_tests_properties(snow-shot-floating-toolbar-input-region-tests PROPERTIES
+        LABELS "unit" TIMEOUT 60)
     add_test(NAME snow-shot-toolbar-stable-tool-frame-tests
         COMMAND snow-shot-floating-toolbar-drag-tests --stable-tool-frame-only -platform offscreen)
     set_tests_properties(snow-shot-toolbar-stable-tool-frame-tests PROPERTIES
@@ -8768,6 +8785,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         src/platform/windows/windowchrome.cpp
     )
     snow_shot_link_macos_window_platform(snow-shot-screen-recording-controller-tests)
+    snow_shot_link_linux_window_platform(snow-shot-screen-recording-controller-tests)
     target_include_directories(snow-shot-screen-recording-controller-tests PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-capture-c/include"
@@ -9449,6 +9467,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         snow_draw_engine_qt_canvas ant_design_qt adqt_icon_core ant_design_icons_qt
         Qt6::Widgets Qt6::Network Qt6::GuiPrivate)
     snow_shot_link_macos_window_platform(snow-shot-translation-tool-tests)
+    snow_shot_link_linux_window_platform(snow-shot-translation-tool-tests)
     if(WIN32)
         target_link_libraries(snow-shot-translation-tool-tests PRIVATE user32 comctl32)
     endif()
