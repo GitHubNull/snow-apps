@@ -108,6 +108,11 @@ jobs:
           key: vcpkg-linux-v2-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
           restore-keys: vcpkg-linux-v2-
 
+      - name: Prepare vcpkg download cache
+        # actions/cache only recreates the directory on a hit; vcpkg refuses a
+        # VCPKG_DOWNLOADS path that does not exist yet.
+        run: mkdir -p "$VCPKG_DOWNLOADS"
+
       - name: Bootstrap Linux toolchain
         run: bash scripts/bootstrap-linux.sh
 
@@ -186,7 +191,7 @@ jobs:
         with:
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
           path: |
-            .tools/vcpkg/downloads
+            .tools/vcpkg-downloads
             .tools/vcpkg-bincache
 
   windows:
@@ -239,6 +244,11 @@ jobs:
             .tools/vcpkg-bincache
           key: vcpkg-windows-static-v2-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
           restore-keys: vcpkg-windows-static-v2-
+
+      - name: Prepare vcpkg download cache
+        # actions/cache only recreates the directory on a hit; vcpkg refuses a
+        # VCPKG_DOWNLOADS path that does not exist yet.
+        run: New-Item -ItemType Directory -Force -Path $env:VCPKG_DOWNLOADS | Out-Null
 
       - name: Bootstrap static dependencies
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
@@ -303,7 +313,7 @@ jobs:
         with:
           key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
           path: |
-            .tools/vcpkg/downloads
+            .tools/vcpkg-downloads
             .tools/vcpkg-bincache
 
   publish:
