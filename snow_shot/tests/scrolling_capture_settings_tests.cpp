@@ -291,8 +291,12 @@ void changedSettingsRecapture(ScreenshotScrollingRecognitionMode mode, bool auto
     coordinator.showToolbar();
     QCoreApplication::processEvents();
     until([] { return liveSources == 1; });
-    require(requests.size() == 1 && !requests.back().excludedIds.isEmpty(),
-            "initial capture must exclude the interface");
+    require(requests.size() == 1, "initial capture must request a source");
+#if !defined(Q_OS_LINUX)
+    // Linux captures through the Qt frame source with an X input hole and has no
+    // per-window capture exclusion, so the native source receives no window ids.
+    require(!requests.back().excludedIds.isEmpty(), "initial capture must exclude the interface");
+#endif
     const auto initialIds = requests.back().excludedIds;
     QImage frame(selection.size(), QImage::Format_RGBA8888);
     frame.fill(Qt::red);
@@ -348,12 +352,14 @@ void changedSettingsRecapture(ScreenshotScrollingRecognitionMode mode, bool auto
                     requests.back().excludedIds ==
                         (captureInterface ? QVector<std::uint32_t>{} : initialIds),
                 "recapture must create a fresh source with the new interface exclusion policy");
+#if !defined(Q_OS_LINUX)
         // Retired workers retain sharing exclusions until native teardown completes.
         until(
             [&] {
                 return captureInterface ? excludedWindows.isEmpty() : !excludedWindows.isEmpty();
             },
             "recapture must also reapply the native window sharing policy");
+#endif
         frame.fill(captureInterface ? Qt::blue : Qt::green);
         requests.back().source->push(frame);
         until([&] { return capture.state().value(QStringLiteral("ready")).toBool(); });

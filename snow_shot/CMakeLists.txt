@@ -7682,6 +7682,12 @@ if(SNOW_SHOT_BUILD_TESTS)
         ${SNOW_SHOT_COLLAGE_EXPORT_TEST_SOURCES}
         src/presentation/services/screenshotexportscrollingsource.cpp)
     list(REMOVE_DUPLICATES _scrolling_settings_test_sources)
+    # snow_shot_image_split owns Settings through its PUBLIC link; drop sources the
+    # Settings library already compiles so the test links a single definition.
+    get_target_property(_scrolling_settings_owned_sources snow_shot_settings SOURCES)
+    if(_scrolling_settings_owned_sources)
+        list(REMOVE_ITEM _scrolling_settings_test_sources ${_scrolling_settings_owned_sources})
+    endif()
     add_executable(snow-shot-scrolling-capture-settings-tests
         tests/scrolling_capture_settings_tests.cpp
         ${_scrolling_settings_test_sources}
@@ -7696,7 +7702,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         src/image src/presentation/services)
     target_link_libraries(snow-shot-scrolling-capture-settings-tests PRIVATE
         snow-shot-scrolling-settings-test-runtime snow_shot_diagnostics snow_shot_storage
-        snow_shot_image_split
+        snow_shot_image_split snow_shot_settings
         snow_shot_window_shortcuts snow_draw_engine_qt_canvas snow_canvas_image snow_stitch_images_c
         ant_design_qt adqt_icon_core ant_design_icons_qt Qt6::Widgets)
     snow_shot_link_macos_window_platform(snow-shot-scrolling-capture-settings-tests)
