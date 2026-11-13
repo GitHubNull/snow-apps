@@ -413,6 +413,14 @@ and minimal QPA platforms used by tests do not trip the gate.
   action reports that no capturable window was found.
 - Global mouse gestures fall back to the unsupported backend. Global keyboard
   shortcuts work through `XGrabKey` on X11 sessions.
+- Chinese input methods do not engage in the text tool or settings inputs
+  (verified with fcitx5/rime on 2026-11-13): keys arrive as raw ASCII with no
+  preedit or candidate window. The bundled Qt 6.12 kit ships only the
+  ibus/compose input-context plugins, and the app's input contexts never take
+  input-method focus (`fcitx5-diagnose` reports `focus:0`); a minimal QLineEdit
+  app built with the same kit receives candidates, so the gap is
+  application-side. Type ASCII or paste text from an external editor until a
+  fcitx5-qt6 plugin and the focus handling are added.
 - Wayland sessions are detected and the screenshot feature family is gated off
   with a user-visible explanation; the verified desktop path is X11 with
   OpenGL 3.3 or newer (XWayland follows the X11 path on a best-effort basis).

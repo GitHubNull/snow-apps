@@ -336,6 +336,11 @@ Viewer 测试（仅在改到 viewer 时运行）：
 - X11 剪贴板归应用所有，应用退出后是否保留取决于桌面剪贴板管理器；验证当前 Cinnamon 会话的行为并记录到文档。
 - 文字工具用中文输入法（ibus/fcitx）输入未验证；若发现输入法候选框/提交异常，再定位 Qt xcb IM 插件问题。
 
+> **状态（2026-11-13，P3-T6 实测）**
+>
+> - **剪贴板持久化：通过。** 复制 301×201 截图后再复制 501×301（排除残留），`kill -TERM` 退出应用后 `xclip -t image/png -o` 仍返回 501×301，且与退出前像素一致；Cinnamon `csd-clipboard` 接管剪贴板。
+> - **输入法：未通过，登记为已知限制（应用侧）。** fcitx5（rime）在画布文字工具与设置搜索框中均不接管：`QT_IM_MODULE=fcitx5/ibus/xim/compose` 全部直接上屏原始拼音，无 preedit/候选框/提交事件；正常实例与 e2e 实例均复现。捆绑 Qt 6.12 只带 ibus/compose 平台输入插件（无 fcitx5-qt6 插件，`QT_DEBUG_PLUGINS=1` 确认加载）；用同一捆绑 Qt 的最小 QLineEdit 程序可正常弹候选框（fcitx5 经 ibus 前端），`fcitx5-diagnose` 显示应用从未聚焦 input context（全部 `focus:0`）。结论：环境与插件链路正常，问题在应用 input context 的聚焦/启用；后续需为 Qt 6.12 捆绑 fcitx5-qt6 插件并排查画布编辑器焦点时序（`snow_canvas_widget_text_interaction.cpp` 已 `setInputMethodEnabled(true)`）。详见 `docs-linux-p3-handover.md` §6.6。
+
 ### P2 功能缺位（默认不做）
 
 > 状态（2026-11-10）：P2 已按用户要求完成 OCR/翻译/QR/表格/LaTeX 与滚动截图，见 `docs-linux-p2-handover.md`。以下清单仅剩这些仍未实现：
@@ -435,6 +440,7 @@ P0 全部完成并满足各自验收，P1 至少完成光标/窗口排除/Waylan
 4. T7：截图帧中不含主窗口 / 浮动工具栏 / 贴图窗口。✅（overlay 背景帧无应用窗口）
 5. T9：Xephyr Zaphod 双屏 + 混合 DPI 几何实测。⏳（几何单测覆盖负原点/混合 DPI；Xephyr 实测未做）
 6. 安装版复验：用 §6.2 的方式启动安装树再跑一遍核心链路。✅（仓库外裸跑 + F1 全链路 + ldd 0 缺失 + png_ 0 导出）
+7. P1-E：剪贴板跨应用退出保留 ✅（csd-clipboard，301×201 → 501×301 后退出仍为 501×301，2026-11-13）；中文输入法 ⚠️ fcitx5 不接管（已知限制，见 §P1-E 状态块）
 
 **已解决的验收障碍**：`build/linux-debug` 主程序二进制曾停留在 T3 之前的旧构建（缺 Linux 快捷键后端符号），导致 F1 首次复验“注册失败”；重跑 `cmake --preset linux-debug` + 重建后一切正常。教训已记入项目记忆：主程序验收前必须先重建并 `nm` 确认新符号。
 
