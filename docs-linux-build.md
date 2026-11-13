@@ -407,6 +407,16 @@ and minimal QPA platforms used by tests do not trip the gate.
   (mode `1`, XTest buttons 6/7) stitching were verified on a real X11 desktop
   on 2026-11-13; the horizontal acceptance produced a 4090×542 long image whose
   sampled column ranges were consecutive with no duplicate or missing columns.
+- The floating selection toolbar paints a drop shadow inside a 24 px
+  transparent frame and its window top overlaps the selection's bottom edge.
+  On X11 the app now installs an `XShape` input region that contains only the
+  interactive panels (plus their straight-line gaps), so presses on the frame
+  margin or the panel gaps reach the overlay underneath and every selection
+  border and corner stays draggable; `ShapeBounding` is untouched, so the
+  painted shadow is unchanged. Verified on an isolated Xephyr display on
+  2026-11-14: dragging the bottom-center handle changed the selection height
+  (301 px to 401 px) with the top edge fixed, and the style row switched its
+  input region when the tool changed.
 - Smart selection and window selection depend on native backends that are not
   built on Linux. Live (continuously updating) pinned window capture is
   unavailable: `liveWindowTargetAtPoint` returns `nullopt` and the pin-window
