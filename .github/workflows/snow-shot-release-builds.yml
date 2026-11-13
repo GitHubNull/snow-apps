@@ -262,6 +262,32 @@ jobs:
       - name: Build Snow Shot
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -Target snow_shot
 
+      - name: Collect third-party license bundle
+        # The Windows install component embeds the collected notice bundle,
+        # which package-snow-shot.ps1 normally generates before installing.
+        run: |
+          $repo = $env:GITHUB_WORKSPACE
+          $build = Join-Path $repo 'build/snow-shot-msvc-release'
+          $ocrManifest = Join-Path $repo 'snow-crates/crates/snow-ocr-process/Cargo.toml'
+          $cargoOptions = @{}
+          $cargoOptions[(Join-Path $repo 'snow_rust_ffi/Cargo.toml')] =
+            @('--features', 'selected-text,language-detection')
+          $cargoOptions[$ocrManifest] = @('--no-default-features', '--features', 'crash-diagnostics,gpu')
+          & ./scripts/collect-third-party-licenses.ps1 `
+            -Destination (Join-Path $build 'snow_shot/third-party-licenses/third-party') `
+            -AllowedRoot $build `
+            -VcpkgPrefix (Join-Path $repo '.tools/vcpkg/installed/static/x64-windows-static') `
+            -QtPrefix (Join-Path $repo '.tools/qt/6.12.0/msvc2026_64-static-system-codecs') `
+            -CargoManifest @(
+              (Join-Path $repo 'snow_rust_ffi/Cargo.toml'),
+              $ocrManifest,
+              (Join-Path $repo 'snow_shot/rust/snow-shot-mcp/Cargo.toml'),
+              (Join-Path $repo 'snow_shot/rust/snow-shot-updater/Cargo.toml')) `
+            -CargoOptions $cargoOptions `
+            -AntDesignNotice (Join-Path $repo 'ant_design_qt/THIRD_PARTY_NOTICES.md') `
+            -FallbackLicenseDirectory (Join-Path $repo 'licenses')
+          if ($LASTEXITCODE -ne 0) { throw 'Third-party license collection failed.' }
+
       - name: Install and verify
         run: |
           $stage = Join-Path $env:GITHUB_WORKSPACE 'stage'
