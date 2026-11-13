@@ -119,7 +119,6 @@ startupDiagnosticsOptions(const QString& selectedDirectory, const QString& appli
 QString updateInstallationRoot(const QString& executableDirectory) {
     return QFileInfo(executableDirectory).dir().absolutePath();
 }
-
 std::optional<bool> updateTransactionPending(const QString& helperPath, const QString& root) {
     QProcess helper;
     helper.start(helperPath,
@@ -135,6 +134,47 @@ std::optional<bool> updateTransactionPending(const QString& helperPath, const QS
     }
     return output == "pending";
 }
+#endif
+
+#if defined(Q_OS_LINUX)
+// The Qt platform integration registers with xdg-desktop-portal while the
+// QApplication is constructed. A rejected registration (the session bus already
+// owns the app id after a previous run) surfaces as a startup warning even
+// though the application keeps working, so suppress those messages around the
+// platform initialization and report the count once as a diagnostic.
+struct PortalStartupMessageFilter {
+    static PortalStartupMessageFilter& instance() {
+        static PortalStartupMessageFilter filter;
+        return filter;
+    }
+
+    void install() {
+        previous = qInstallMessageHandler(&PortalStartupMessageFilter::handle);
+    }
+    void restore() {
+        qInstallMessageHandler(previous);
+    }
+
+    static void handle(QtMsgType type, const QMessageLogContext& context, const QString& message) {
+        auto& filter = instance();
+        if (context.category != nullptr && qstrcmp(context.category, "qt.qpa.services") == 0 &&
+            (message.contains(QLatin1String("QDBusError")) ||
+             message.contains(QLatin1String("host portal")))) {
+            ++filter.suppressed;
+            return;
+        }
+        if (filter.previous != nullptr) {
+            filter.previous(type, context, message);
+            return;
+        }
+        const QByteArray output = qFormatLogMessage(type, context, message).toUtf8();
+        std::fwrite(output.constData(), 1, static_cast<size_t>(output.size()), stderr);
+        std::fputc('\n', stderr);
+    }
+
+    QtMessageHandler previous = nullptr;
+    int suppressed = 0;
+};
 #endif
 } // namespace
 
@@ -467,11 +507,17 @@ int main(int argc, char* argv[]) {
     // The internal application name also owns settings and single-instance keys.
     // Keep it stable while giving Qt windows and the macOS menu the product name.
     QGuiApplication::setApplicationDisplayName(snow_shot::app::edition::productName());
+#if defined(Q_OS_LINUX)
+    // Match the installed desktop entry before the platform integration starts:
+    // xdg-desktop-portal resolves the application id during QApplication
+    // construction, so setting it afterwards is too late.
+    QGuiApplication::setDesktopFileName(QStringLiteral("snow-shot"));
+    auto& portalFilter = PortalStartupMessageFilter::instance();
+    portalFilter.install();
+#endif
     QApplication app(argc, argv);
 #if defined(Q_OS_LINUX)
-    // Match the installed desktop entry so Wayland compositors see the app id
-    // and launchers can associate the running window with its icon.
-    QGuiApplication::setDesktopFileName(QStringLiteral("snow-shot"));
+    portalFilter.restore();
 #endif
     // Forwarding processes need only Qt and the instance protocol. Storage probes,
     // helper processes and display discovery belong to the primary instance.
@@ -587,6 +633,13 @@ int main(int argc, char* argv[]) {
                                      QStringLiteral("application.platform"),
                                      {{QStringLiteral("backend"), QGuiApplication::platformName()},
                                       {QStringLiteral("os"), QSysInfo::kernelVersion()}});
+#if defined(Q_OS_LINUX)
+    if (portalFilter.suppressed > 0) {
+        snow_shot::diagnostics::logEvent(QStringLiteral("snow_shot.app"),
+                                         QStringLiteral("startup.portal_warning_suppressed"),
+                                         {{QStringLiteral("count"), portalFilter.suppressed}});
+    }
+#endif
 #ifdef Q_OS_MACOS
     const auto logDisplay = [](QScreen* screen) {
         const QRect geometry = screen->geometry();

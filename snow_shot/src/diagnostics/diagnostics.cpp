@@ -18,6 +18,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <cstdio>
 #include <deque>
@@ -84,6 +85,14 @@ QString severity(QtMsgType type) {
     return QStringLiteral("INFO");
 }
 
+#if defined(Q_OS_LINUX)
+bool isPortalStartupWarning(const QMessageLogContext& context, const QString& message) {
+    return context.category != nullptr && qstrcmp(context.category, "qt.qpa.services") == 0 &&
+           (message.contains(QLatin1String("QDBusError")) ||
+            message.contains(QLatin1String("host portal")));
+}
+#endif
+
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
     if (type == QtFatalMsg) {
         snow_diag_fatal("qt.fatal");
@@ -98,6 +107,22 @@ void messageHandler(QtMsgType type, const QMessageLogContext& context, const QSt
     insideHandler = true;
     try {
         std::lock_guard<std::mutex> lock(handlerMutex);
+#if defined(Q_OS_LINUX)
+        if (isPortalStartupWarning(context, message)) {
+            // xdg-desktop-portal rejects the repeated app-id registration on the
+            // session bus. Qt reports it as a warning although the application
+            // keeps running, so keep it out of the console and the transcript
+            // and record a single diagnostic instead.
+            static std::atomic_bool reported = false;
+            if (installedService != nullptr && !reported.exchange(true)) {
+                installedService->record(QtInfoMsg, QStringLiteral("snow_shot.app"),
+                                         QStringLiteral("startup.portal_warning_suppressed"),
+                                         QString(), {{QStringLiteral("count"), 1}}, context);
+            }
+            insideHandler = false;
+            return;
+        }
+#endif
         if (installedService != nullptr) {
             installedService->record(type, QString::fromUtf8(context.category),
                                      QStringLiteral("qt.message"), message, {}, context);

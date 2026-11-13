@@ -3,6 +3,7 @@
 
 #include <QJsonObject>
 #include <QCursor>
+#include <QDebug>
 #include <QDeadlineTimer>
 #include <QGuiApplication>
 #include <QMutex>
@@ -206,6 +207,14 @@ void GlobalMouseManager::initialize() {
     });
     impl.permission = impl.backend->permissionState();
     emit permissionStateChanged(impl.permission);
+#if defined(Q_OS_LINUX)
+    // The Linux backend is an explicit Unsupported stub; starting it only
+    // produces a failure signal and a startup notification.
+    if (impl.permission.status == GlobalMousePermissionState::Status::Unavailable) {
+        qDebug("Global mouse input is unavailable on this platform; backend not started");
+        return;
+    }
+#endif
     impl.backend->start(
         [this, epoch](GlobalMouseDragEvent event) { m_impl->post(event, epoch); },
         [this, epoch](quint32 code) {

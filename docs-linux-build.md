@@ -136,6 +136,23 @@ because a baseline-CPU PCH cannot be loaded by an AVX2 unit (GCC otherwise
 reports `-Winvalid-pch`). Unity-build inclusion stays disabled for the same
 files.
 
+### Runtime stderr baseline
+
+A fresh isolated start
+(`XDG_CONFIG_HOME=... XDG_DATA_HOME=... snow_shot --e2e-instance-id=...`) writes
+only the storage initialization lines to stderr. Two historical startup
+messages are handled on Linux instead of being printed:
+
+- `Global mouse input initialization failed: 0` is gone. The Linux backend is an
+  explicit Unsupported stub, so `GlobalMouseManager::initialize()` logs a
+  one-line `qDebug` and never calls `start()` when the permission state is
+  `Unavailable`; no failure signal or tray notification is produced.
+- The `qt.qpa.services` portal registration failure from
+  `QDBusConnection`/xdg-desktop-portal is filtered in the diagnostics message
+  handler and recorded once as `startup.portal_warning_suppressed`
+  (`snow_shot.app`, field `count`). The desktop file name is also set before
+  `QApplication` construction so the portal sees the installed app id.
+
 ## Tests
 
 ```bash
