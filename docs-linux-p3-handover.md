@@ -37,6 +37,8 @@
 
 ### 1.3 已登记的存量问题（非 P2 引入，接手后优先清）
 
+> **P3 处置（2026-11-13）**：1 → T1 已修复（`a0deaed5`）；2 → T2 已清零（`744f7dca`）；3 → T3 已清零（`2815e065`，仅剩书面豁免）；4 → T4 已降级（`a8513312`）；5 → T6 剪贴板已验证、输入法登记为已知限制。详见 §6。
+
 1. **`snow-shot-scrolling-capture-settings-tests` 在 Linux 测试树链接失败**（连带 `--image-split-only` 变体）：目标直接编译 `formfields.cpp`/`themecolorscheme.cpp` 等设置源（经 `_scrolling_settings_test_sources`），又（传递）链入含同源 unity 成员的 `libsnow_shot_settings.a`，产生大量 multiple definition。该目标从未在本机测试树构建成功过。修法方向：测试目标改为只链 `snow_shot_settings` 不再直编重复源，或对重叠源清单去重/给 `snow_shot_settings` 关 unity。
 2. **workspace 全量 clippy 在 Linux 失败**（P2 相关 crate 均零告警，勿动它们）：
    - stable：`snow-audio-recorder` `benchmark.rs` 引用被 cfg 掉的 `crate::convert`（模块门控不一致）；`snow-ui-selector` dead_code（`ElementRect::new`、`QueryControl` 字段）
@@ -118,3 +120,80 @@
 - T5/T6：真机验收记录写回本文档完成状态一节
 - T7+：每项独立提交、独立验收，完成后同步 `docs-linux-build.md` Known limitations、`AGENTS.md` Linux 段与本文档
 - 全程：只跑过滤测试；commit ≠ push；文档随代码同步
+
+## 6. 完成状态（2026-11-13）
+
+本轮按用户确认的范围完成 T1–T6；T7+ 未实施（优先级见 §6.7）。所有提交都在本地 `main`，未 push。
+
+### 6.1 任务状态
+
+| 项 | 状态 | 提交 | 验证摘要 |
+|---|---|---|---|
+| T1 | ✅ 完成 | `a0deaed5` | 测试树目标可构建；按需用例 2/2；滚动族 17/17 |
+| T2 | ✅ 完成 | `744f7dca` | stable workspace clippy 全绿；nightly 目标 crate 全绿；`snow-stitch-images` 118 passed |
+| T3 | ✅ 完成 | `2815e065` | 项目源码零编译告警；完整重建仅剩书面豁免的 minizip `mktemp` 1 条 |
+| T4 | ✅ 完成 | `a8513312` | 隔离启动 stderr 无全局鼠标/portal 告警；抑制计数事件落盘 |
+| T5 | ✅ 完成 | `T5_DOC_COMMIT`（文档） | 水平长图 4090×542，分段连续无重复；手动 6/7 方向正确 |
+| T6 | 剪贴板 ✅ / 输入法 ⚠️ | 后续 T6 文档提交 | 剪贴板跨退出保留；fcitx5 不接管（登记已知限制） |
+
+### 6.2 T1 测试树链接
+
+- 根因：`snow-shot-scrolling-capture-settings-tests` 直接编译 4 个 Settings 已拥有的源（`thememanager.cpp`/`themecolorscheme.cpp` 来自 `_color_picker_lifecycle_sources`；`formfields.cpp`/`pathinput.cpp` 由 palette 注入循环加入），同时经 `snow_shot_image_split` 传递链接 `snow_shot_settings`，产生 multiple definition。
+- 修法：显式直链 `snow_shot_settings`（让注入循环的"独立宿主"判断成立而跳过注入），并从测试源清单减去 Settings 已编译的同名源；`screenshottoolpalette.cpp` 不在 Settings 清单，保留测试自有实现。
+- 验证（2026-11-13 复跑）：
+  - `ctest -R 'scrolling-capture-settings|scrolling-image-split'` → 2/2 passed
+  - `ctest -R 'snow-shot-scrolling'` → 17/17 passed（P2 基线 15/17，两条链接失败用例补齐）
+
+### 6.3 T2 Rust 红线
+
+- `snow-audio-recorder`：`convert` 模块门控加入 `feature = "bench-internals"`，benchmark 可见。
+- `snow-ui-selector`：Linux 无读取者的 `ElementRect::new` / `QueryControl` 字段用 `cfg_attr(not(windows/macos), allow(dead_code))`；示例按平台拆分（`*_windows.rs`）。
+- `snow-media`：`chunks_exact` → `as_chunks`（stable/nightly 双可用的 1.88 API），保留余数语义（NEON 尾部仍走 `swap_scalar`）。
+- 同步修掉的其它 clippy 项：`snow-capture`、`snow-recording-export`、`snow-stitch-images`、`snow-ui-selector-c`。
+- 验证：stable `cargo clippy --workspace --exclude snow-ocr-process --all-targets --all-features -- -D warnings` 全绿；nightly-2026-09-08 对 `snow-ocr-process`/`snow-media`/`snow-stitch-images` 全绿；`cargo test -p snow-stitch-images` 118 passed，`snow-media`/`snow-audio-recorder`/`snow-ui-selector` 测试通过。
+
+### 6.4 T3 编译告警 / T4 运行告警
+
+T3：
+
+- `-Wchanges-meaning`：QR 服务内部 `RequestToken`/`Completion` 别名上移到 `Impl` 类首。
+- `-Wsubobject-linkage`：6 个文件的匿名命名空间类型迁入具名命名空间（`snow_canvas_widget_detail`、`about_page_detail` 等），成员声明处限定；这些文件无 `Q_OBJECT`，无 moc 影响。
+- SIMD PCH：`cmake/SnowSimd.cmake` 对 GCC 也跳过 AVX2 单元的 PCH（否则 `-Winvalid-pch`）；契约脚本同步。
+- 豁免：minizip `mktemp`（vcpkg 4.1.0 第三方，链接期 1 条）与 Qt 部署 sl/gl/lt/pt_PT 翻译缺失（上游），写入 `docs-linux-build.md` 的 "Warning baseline and waivers"。
+- 验证：`cmake --preset linux-debug` + 完整重建 `snow_shot`，日志告警仅 1 条豁免项（`mktemp`）。
+
+T4：
+
+- `GlobalMouseManager::initialize()` 在 Linux 且权限状态为 `Unavailable` 时不启动后端，只输出一行 qDebug；不再发失败信号/托盘通知。
+- `main.cpp`：`setDesktopFileName` 提前到 `QApplication` 构造前；诊断处理器对 `qt.qpa.services` 的 portal 注册失败定向降级，并记录一次 `startup.portal_warning_suppressed`（field `count`）。
+- 验证：隔离实例 `timeout 20 ... --e2e-instance-id=snow-t4` 的 stderr 仅剩 storage 初始化 + 一行 qDebug；`QDBusError` 0 条。
+
+### 6.5 T5 水平滚动真机验收
+
+- 目标：独立临时 Chrome profile 的 `--app=file://.../wide.html`（400 列宽表，1200×700），不触碰用户浏览器标签；测后关闭并删除临时目录。
+- 严格一轮：选区 (92,160)–(1181,701)（左端含 C000 列）→ 水平模式 → 自动滚动（操作总时长 35s）：
+  - `scrolling.mode_changed mode=1`；`scrolling.auto_scroll status=true`；`scrolling.wheel_dispatch status=0 code=0`
+  - `scrolling.capture_progress frames_accepted=27 duration_ms=35047`
+  - `scrolling.stopped width=4090 height=542 preview_received=true`
+  - 剪贴板取回长图 4090×542（ffprobe）
+- 内容判定：C000–C024 / C022–C045 / C043–C066 三段连续，无重复/缺失列；长图最左列与滚动前页面截图像素一致。
+- 长跑：100s 自动滚动得到 19991×541，宽度持续增长，无拼接异常。
+- 手动方向：`xdotool click 7` 向右、`click 6` 向左（`scrollinput.cpp` 中 x>0→button 7，x<0→button 6）。
+- 证据：会话临时目录 `/tmp/snow-t5/`（`long-run2.png`、分段截图等；`artifacts/` 为 git-ignored，不入库）。
+
+### 6.6 T6 剪贴板 / 输入法
+
+- 剪贴板持久化：**通过**。复制 301×201 再复制 501×301（排除残留），`kill -TERM` 退出应用后 `xclip -t image/png -o` 仍返回 501×301 且与退出前像素一致 → Cinnamon `csd-clipboard` 接管保留。
+- 输入法：**未通过，登记为已知限制（应用侧）**。
+  - fcitx5（rime）在画布文字工具与设置搜索框中均不接管：`QT_IM_MODULE=fcitx5/ibus/xim/compose` 全部直接上屏原始拼音，无 preedit/候选框/提交事件；正常实例与 e2e 实例均复现。
+  - 捆绑 Qt 6.12 只有 ibus/compose 平台输入插件（无 fcitx5-qt6 插件；`QT_DEBUG_PLUGINS=1` 确认加载）；用同一捆绑 Qt 的最小 QLineEdit 程序可正常弹候选框（fcitx5 经 ibus 前端）。
+  - `fcitx5-diagnose`：应用从未聚焦 input context（全部 `focus:0`）。
+  - 结论：环境与插件链路正常，问题在应用 input context 的聚焦/启用；后续需为 Qt 6.12 捆绑 fcitx5-qt6 插件，并排查画布编辑器焦点时序（`snow_canvas_widget_text_interaction.cpp` 已 `setInputMethodEnabled(true)`）。详见 `docs-linux-handover.md` §P1-E。
+
+### 6.7 T7+ 优先级（用户 2026-11 确认）
+
+1. 智能选区 / 窗口选区（`visual-region-detector` 加 X11 后端，可复用 `x11windowquery.cpp`）
+2. 实时贴图（`livewindownative.cpp` 桩替换，XShm/XComposite 持续抓取）
+3. 录屏、划词翻译、打印/AirDrop/自动更新/Crashpad、DEB/RPM/AppImage（开工前再确认）
+
+T7+ 每项独立提交、独立验收；动手前与用户确认验收口径。

@@ -403,7 +403,10 @@ and minimal QPA platforms used by tests do not trip the gate.
   the physical selection) plus XTest wheel dispatch, and excludes the selection
   from the overlay's X input shape. It has no per-window capture exclusion, so
   avoid overlapping other Snow Shot windows (for example the scrolling
-  thumbnail) with the selection when stitching.
+  thumbnail) with the selection when stitching. Vertical and horizontal
+  (mode `1`, XTest buttons 6/7) stitching were verified on a real X11 desktop
+  on 2026-11-13; the horizontal acceptance produced a 4090×542 long image whose
+  sampled column ranges were consecutive with no duplicate or missing columns.
 - Smart selection and window selection depend on native backends that are not
   built on Linux. Live (continuously updating) pinned window capture is
   unavailable: `liveWindowTargetAtPoint` returns `nullopt` and the pin-window
