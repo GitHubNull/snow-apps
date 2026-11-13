@@ -105,7 +105,8 @@ endforeach()
                                            windows_architecture='arm64', compiler='MSVC'))
 
     def test_other_x86_compilers_keep_avx2_sources_out_of_unity(self):
-        self.assert_kernels(self.properties(processor='x86_64', compiler='GNU'), '-mavx2')
+        self.assert_kernels(self.properties(processor='x86_64', compiler='GNU'), '-mavx2',
+                            pch=True)
 
     def test_other_arm_compilers_keep_baseline_flags(self):
         self.assert_kernels(self.properties(processor='aarch64', compiler='GNU'))

@@ -21,10 +21,7 @@
 #include <optional>
 
 namespace snow_canvas_export {
-namespace {
-
-thread_local RenderDiagnostics g_renderDiagnostics;
-
+namespace export_detail {
 struct ExportProjection {
     QRectF canvasRect;
     QSize outputSize;
@@ -49,6 +46,12 @@ struct ExportProjection {
                       normalized.width() * scaleX(), normalized.height() * scaleY());
     }
 };
+} // namespace export_detail
+
+namespace {
+using export_detail::ExportProjection;
+
+thread_local RenderDiagnostics g_renderDiagnostics;
 
 qreal rasterScaleForProjection(const ExportProjection& projection) {
     return qMax(1.0, qMin(projection.scaleX(), projection.scaleY()));

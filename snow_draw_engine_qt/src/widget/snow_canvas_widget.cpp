@@ -127,6 +127,9 @@ bool hasFilter(const SnowCanvasSceneItem* sceneItems, std::uint32_t sceneItemCou
     return false;
 }
 
+} // namespace
+
+namespace snow_canvas_widget_detail {
 struct BaseImageSamplingFootprint {
     QRectF canvasRect;
     QRectF coverage;
@@ -183,7 +186,9 @@ bool magnifierSamplesDamage(const SnowCanvasSceneItem& item,
     }
     return false;
 }
+} // namespace snow_canvas_widget_detail
 
+namespace {
 std::uint64_t sceneCacheContentKey(const SceneDisplayInfo& sceneInfo,
                                    const SnowCanvasCustomRenderer* customRenderer,
                                    bool clearBackgroundEnabled, double devicePixelRatio,
@@ -653,7 +658,8 @@ struct SnowCanvasWidget::Impl : public snow_canvas_runtime::Client {
     QElapsedTimer tabletMouseSuppressionClock;
     SnowCanvasTool requestedCanvasTool = SnowCanvasTool::Select;
     SnowCanvasCustomRenderer* installedCustomRenderer = nullptr;
-    std::vector<BaseImageSamplingFootprint> paintedBaseImageSamplingFootprints;
+    std::vector<snow_canvas_widget_detail::BaseImageSamplingFootprint>
+        paintedBaseImageSamplingFootprints;
     std::optional<SnowCanvasSnapGuideTargets> snapGuideTargets;
     std::optional<QRectF> configuredWatermarkRenderArea;
     std::optional<QRectF> configuredSpotlightRenderArea;
@@ -3137,7 +3143,8 @@ bool SnowCanvasWidget::Impl::paint(QPainter& painter, const QRegion& exposedRegi
         const QList<SnowCanvasBaseImageSource> baseImageSources =
             installedCustomRenderer != nullptr ? installedCustomRenderer->baseImageSources()
                                                : QList<SnowCanvasBaseImageSource>{};
-        paintedBaseImageSamplingFootprints = baseImageSamplingFootprints(baseImageSources);
+        paintedBaseImageSamplingFootprints =
+            snow_canvas_widget_detail::baseImageSamplingFootprints(baseImageSources);
         const auto reference = installedCustomRenderer != nullptr
                                    ? installedCustomRenderer->filterRenderReference()
                                    : std::nullopt;
@@ -4579,7 +4586,7 @@ void SnowCanvasWidget::Impl::updateBaseImageContent(const QRegion& damage) {
     const auto& cache = displayState.displayCache();
     const auto& info = cache.sceneInfo();
     const auto projection = snow_canvas_render_geometry::sceneProjection(info);
-    const auto currentFootprints = baseImageSamplingFootprints(
+    const auto currentFootprints = snow_canvas_widget_detail::baseImageSamplingFootprints(
         installedCustomRenderer != nullptr ? installedCustomRenderer->baseImageSources()
                                            : QList<SnowCanvasBaseImageSource>{});
     const auto& plan = cache.executionPlan(widget.devicePixelRatioF());
@@ -4588,9 +4595,10 @@ void SnowCanvasWidget::Impl::updateBaseImageContent(const QRegion& damage) {
         if (item.kind == SNOW_SCENE_DISPLAY_ITEM_MAGNIFIER) {
             // Lenses sample pristine originals, never another lens or an earlier filter.
             // Keep the previous footprint for removal/replacement until the next paint.
-            if (magnifierSamplesDamage(item, projection, currentFootprints, damage) ||
-                magnifierSamplesDamage(item, projection, paintedBaseImageSamplingFootprints,
-                                       damage))
+            if (snow_canvas_widget_detail::magnifierSamplesDamage(item, projection,
+                                                                  currentFootprints, damage) ||
+                snow_canvas_widget_detail::magnifierSamplesDamage(
+                    item, projection, paintedBaseImageSamplingFootprints, damage))
                 itemDamage.push_back(
                     {index,
                      QRegion(snow_canvas_render_geometry::alignedRectForBounds(item.viewBounds))});

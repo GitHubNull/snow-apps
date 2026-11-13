@@ -227,6 +227,9 @@ class QrWorker final : public QObject {
 } // namespace
 
 class ScreenshotQrRecognitionService::Impl final {
+    using RequestToken = ScreenshotQrRecognitionPort::RequestToken;
+    using Completion = ScreenshotQrRecognitionPort::Completion;
+
   public:
     Impl(ScreenshotQrRecognitionService* owner, QString modelsDirectory,
          int idleTimeoutMilliseconds)
@@ -288,9 +291,6 @@ class ScreenshotQrRecognitionService::Impl final {
     }
 
   private:
-    using RequestToken = ScreenshotQrRecognitionPort::RequestToken;
-    using Completion = ScreenshotQrRecognitionPort::Completion;
-
     struct Request {
         snow_shot::runtime::RuntimeActivityLease activity =
             snow_shot::runtime::RuntimeActivityTracker::shared().acquire();

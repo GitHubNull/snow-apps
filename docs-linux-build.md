@@ -107,6 +107,35 @@ The `linux-debug` preset sets `Qt6_DIR` to
 The `--version`/`--help` offscreen runs are headless smoke tests only. See the
 desktop smoke tests below for the real runtime verification.
 
+## Warning baseline and waivers
+
+`cmake --build --preset build-linux-debug --target snow_shot` compiles with the
+repository warning set and, after the P3 cleanup (2026-11-13), emits no compiler
+diagnostics from project sources. Two message classes remain by design:
+
+- **minizip-ng `mktemp` (link time).** `libminizip-ng.a` from the vcpkg overlay
+  port (`minizip-ng` 4.1.0, `mz_os_posix.c:372`) calls `mktemp`, so GNU `ld`
+  prints ``the use of `mktemp' is dangerous``. The code is third-party and a
+  patch would change dependency behavior; it is not fixable from this
+  repository. Recheck: `cmake --build --preset build-linux-debug --target
+  snow_shot 2>&1 | grep -c "mktemp"` (one expected, plus the linker line).
+- **Qt deployer locale warnings (install time).** `cmake --install` reports
+  `No translations found for requested locale 'sl'/'gl'/'lt'/'pt_PT'` from
+  `qt6_deploy_translations` in `Qt6CoreDeploySupport.cmake`. The Qt 6.12 kit
+  ships catalogs for those locales only for modules other than `qtbase`, and
+  the deployer globs every `qt_*.qm` instead of using an explicit locale list.
+  The installed application is unaffected (its own catalogs cover `en_US`,
+  `zh_CN`, `zh_TW`). Recheck: `cmake --install build/linux-debug --prefix
+  /tmp/snow-install-check 2>&1 | grep -c "No translations found"` (four
+  expected), then delete the temporary prefix.
+
+The AVX2 translation units (`snow_canvas_filter_avx2.cpp`,
+`snow_canvas_pen_mask_avx2.cpp`) skip precompiled headers: `cmake/SnowSimd.cmake`
+sets `SKIP_PRECOMPILE_HEADERS` for `-mavx2` sources under both Clang and GNU,
+because a baseline-CPU PCH cannot be loaded by an AVX2 unit (GCC otherwise
+reports `-Winvalid-pch`). Unity-build inclusion stays disabled for the same
+files.
+
 ## Tests
 
 ```bash
@@ -135,6 +164,17 @@ virtual-desktop cropping offsets, negative-origin multi-screen unions, and
 mixed-DPI physical-rect rounding (`physicalRectForGeometry`). It runs offscreen
 and does not capture the real desktop. Build it with
 `build-linux-snow-shot-tests`.
+
+The scrolling capture settings tests are also buildable on Linux after the P3
+link fix; they are not part of the `build-linux-snow-shot-tests` preset, so
+build them by target when touching the scrolling settings:
+
+```bash
+.tools/venv/bin/cmake --build build/linux-debug-tests \
+    --target snow-shot-scrolling-capture-settings-tests
+.tools/venv/bin/ctest --test-dir build/linux-debug-tests \
+    -R 'scrolling-capture-settings|scrolling-image-split' --output-on-failure
+```
 
 `snow-shot-linux-x11-logic-tests` covers the X11 shortcut/window helpers
 offscreen: lock-mask combinations, Qt-to-X11 keysym mapping and unmappable

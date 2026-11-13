@@ -97,6 +97,9 @@ QColor blendAboutColor(const QColor& foreground, const QColor& background, qreal
                            static_cast<qreal>(background.blueF()) * (1 - amount)));
 }
 
+} // namespace
+
+namespace about_page_detail {
 class AboutHeroSurface final : public QFrame {
   public:
     explicit AboutHeroSurface(QWidget* parent) : QFrame(parent) {}
@@ -306,7 +309,9 @@ class AboutResourceButton final : public AdButton {
     QColor m_contentColor;
     qreal m_contentDpr = 0;
 };
+} // namespace about_page_detail
 
+namespace {
 QUrl aboutProjectUrl(const QString& suffix = {}) {
     QUrl url(QStringLiteral(SNOW_SHOT_PROJECT_URL));
     QString path = url.path();
@@ -322,7 +327,7 @@ struct AboutPageWidget::Ui {
     styles::ThemeColorScheme scheme;
     qreal backgroundOpacity = 1.0;
     PageContainerWidget* container = nullptr;
-    AboutHeroSurface* hero = nullptr;
+    about_page_detail::AboutHeroSurface* hero = nullptr;
     QBoxLayout* heroLayout = nullptr;
     QWidget* heroCopy = nullptr;
     QBoxLayout* identityLayout = nullptr;
@@ -331,7 +336,7 @@ struct AboutPageWidget::Ui {
     QLabel* openSource = nullptr;
     QLabel* tagline = nullptr;
     QLabel* description = nullptr;
-    AboutArtwork* artwork = nullptr;
+    about_page_detail::AboutArtwork* artwork = nullptr;
     QWidget* body = nullptr;
     QVBoxLayout* bodyLayout = nullptr;
     QGridLayout* featureLayout = nullptr;
@@ -368,7 +373,7 @@ struct AboutPageWidget::Ui {
     QWidget* updateActionBlank = nullptr;
     QStackedLayout* updateActions = nullptr;
     QGridLayout* resourceLayout = nullptr;
-    std::array<AboutResourceButton*, 4> resources{};
+    std::array<about_page_detail::AboutResourceButton*, 4> resources{};
     QLabel* linkError = nullptr;
     AdDivider* footerDivider = nullptr;
     QBoxLayout* footerLayout = nullptr;
@@ -399,7 +404,7 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    m_ui->hero = new AboutHeroSurface(content);
+    m_ui->hero = new about_page_detail::AboutHeroSurface(content);
     m_ui->hero->setObjectName(QStringLiteral("aboutHero"));
     m_ui->heroLayout = new QBoxLayout(QBoxLayout::LeftToRight, m_ui->hero);
     m_ui->heroCopy = new QWidget(m_ui->hero);
@@ -427,7 +432,7 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
     m_ui->description = aboutLabel(QStringLiteral("aboutDescription"), m_ui->heroCopy);
     copyLayout->addWidget(m_ui->description);
     m_ui->heroLayout->addWidget(m_ui->heroCopy, 1);
-    m_ui->artwork = new AboutArtwork(m_ui->hero);
+    m_ui->artwork = new about_page_detail::AboutArtwork(m_ui->hero);
     m_ui->heroLayout->addWidget(m_ui->artwork, 0, Qt::AlignCenter);
     layout->addWidget(m_ui->hero);
 
@@ -584,11 +589,14 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
     }
 
     m_ui->resourceLayout = new QGridLayout;
-    m_ui->resources = {
-        new AboutResourceButton(QStringLiteral("aboutWebsite"), outlined::Global(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutSourceCode"), outlined::Code(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutFeedback"), outlined::Comment(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutQqGroup3"), outlined::Qq(), m_ui->body)};
+    m_ui->resources = {new about_page_detail::AboutResourceButton(QStringLiteral("aboutWebsite"),
+                                                                  outlined::Global(), m_ui->body),
+                       new about_page_detail::AboutResourceButton(QStringLiteral("aboutSourceCode"),
+                                                                  outlined::Code(), m_ui->body),
+                       new about_page_detail::AboutResourceButton(QStringLiteral("aboutFeedback"),
+                                                                  outlined::Comment(), m_ui->body),
+                       new about_page_detail::AboutResourceButton(QStringLiteral("aboutQqGroup3"),
+                                                                  outlined::Qq(), m_ui->body)};
     m_ui->bodyLayout->addLayout(m_ui->resourceLayout);
     m_ui->linkError = aboutLabel(QStringLiteral("aboutLinkError"), m_ui->body);
     m_ui->linkError->setTextInteractionFlags(Qt::TextSelectableByMouse |

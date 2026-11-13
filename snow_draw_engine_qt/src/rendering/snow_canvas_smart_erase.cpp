@@ -44,6 +44,19 @@ QByteArray SnowCanvasSmartEraseSnapshot::cacheKey() const {
 }
 
 namespace snow_canvas_smart_erase {
+namespace erase_detail {
+struct Completed {
+    quint64 id = 0;
+    QByteArray key;
+    std::shared_ptr<std::atomic_bool> cancelled;
+    std::shared_ptr<const Result> result;
+};
+struct Mailbox {
+    std::mutex mutex;
+    std::vector<Completed> completed;
+};
+} // namespace erase_detail
+
 namespace {
 quint64 elementKey(const SnowCanvasSceneItem& item) {
     return (static_cast<quint64>(item.element_id.generation) << 32) | item.element_id.index;
@@ -58,17 +71,6 @@ QThreadPool& workerPool() {
     (void)configured;
     return pool;
 }
-
-struct Completed {
-    quint64 id = 0;
-    QByteArray key;
-    std::shared_ptr<std::atomic_bool> cancelled;
-    std::shared_ptr<const Result> result;
-};
-struct Mailbox {
-    std::mutex mutex;
-    std::vector<Completed> completed;
-};
 } // namespace
 
 QByteArray geometryKey(const SnowCanvasSceneItem& item) {
@@ -127,7 +129,7 @@ struct Coordinator::Impl {
         }
     }
     void collect() {
-        std::vector<Completed> completed;
+        std::vector<erase_detail::Completed> completed;
         {
             std::lock_guard lock(mailbox->mutex);
             completed.swap(mailbox->completed);
@@ -165,7 +167,7 @@ struct Coordinator::Impl {
     QHash<QByteArray, std::shared_ptr<const Result>> cache;
     std::vector<QByteArray> cacheOrder;
     qsizetype retainedBytes = 0;
-    std::shared_ptr<Mailbox> mailbox = std::make_shared<Mailbox>();
+    std::shared_ptr<erase_detail::Mailbox> mailbox = std::make_shared<erase_detail::Mailbox>();
     unsigned activeJobs = 0;
     SnowCanvasSmartEraseSnapshot frozen;
 };

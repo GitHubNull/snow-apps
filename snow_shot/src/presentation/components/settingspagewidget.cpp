@@ -54,7 +54,9 @@ namespace {
 namespace settings = snow_shot::presentation::settings;
 namespace settings_ui = snow_shot::presentation::components;
 namespace form_fields = snow_shot::presentation::components::form_fields;
+} // namespace
 
+namespace settings_page_detail {
 class RelatedSettingsPanel final : public QWidget {
   public:
     explicit RelatedSettingsPanel(QWidget* parent) : QWidget(parent) {
@@ -81,7 +83,9 @@ class RelatedSettingsPanel final : public QWidget {
     QColor background;
     int radius = 0;
 };
+} // namespace settings_page_detail
 
+namespace {
 std::optional<snow_shot::presentation::AppPermission>
 permissionForRenderer(settings::SettingsCustomRenderer renderer) {
     using Permission = snow_shot::presentation::AppPermission;
@@ -205,7 +209,7 @@ class SettingsPageWidget::Impl {
         contentLayout->setSpacing(0);
 
         if (!page->relatedLinks.isEmpty()) {
-            relatedPanel = new RelatedSettingsPanel(contentWidget);
+            relatedPanel = new settings_page_detail::RelatedSettingsPanel(contentWidget);
             relatedPanel->setObjectName(
                 settings::generatedObjectName(QStringLiteral("settings-related"), page->id));
             auto* panelLayout = new QVBoxLayout(relatedPanel);
@@ -1660,7 +1664,7 @@ class SettingsPageWidget::Impl {
     adqt::widgets::AdScrollArea* scrollArea = nullptr;
     QWidget* contentWidget = nullptr;
     QVBoxLayout* contentLayout = nullptr;
-    RelatedSettingsPanel* relatedPanel = nullptr;
+    settings_page_detail::RelatedSettingsPanel* relatedPanel = nullptr;
     QLabel* relatedHeader = nullptr;
     QVector<adqt::widgets::AdButton*> relatedButtons;
     QPointer<QFrame> searchHighlight;

@@ -202,7 +202,9 @@ QString cssColor(const QColor& color) {
         .arg(color.blue())
         .arg(color.alpha());
 }
+} // namespace
 
+namespace settings_custom_detail {
 class ToolbarDragButton final : public adqt::widgets::AdButton {
   public:
     explicit ToolbarDragButton(const QString& itemId, const QString& objectNamePrefix,
@@ -729,8 +731,10 @@ class ToolbarHiddenDropZone final : public QFrame {
     QColor m_accentColor;
     bool m_dragActive = false;
 };
+} // namespace settings_custom_detail
 
-void clearPosition(ToolbarPositionWidget* position) {
+namespace {
+void clearPosition(settings_custom_detail::ToolbarPositionWidget* position) {
     if (position == nullptr || position->contentLayout() == nullptr) {
         return;
     }
@@ -739,6 +743,11 @@ void clearPosition(ToolbarPositionWidget* position) {
     }
 }
 } // namespace
+
+using settings_custom_detail::ToolbarDragButton;
+using settings_custom_detail::ToolbarDropSurface;
+using settings_custom_detail::ToolbarHiddenDropZone;
+using settings_custom_detail::ToolbarPositionWidget;
 
 class TrayMenuOptionsSettingsWidget final : public SettingsCustomWidget {
   public:
