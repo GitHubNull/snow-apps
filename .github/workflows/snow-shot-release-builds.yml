@@ -74,22 +74,30 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install Rust components and OCR toolchain
+        # The runner default (stable) is newer than the documented toolchain, and
+        # newer releases promote lints to deprecations that the shared crates
+        # deny. Pin the workspace build to the supported minimum.
         run: |
-          rustup component add rustfmt clippy
+          stable_toolchain="$(python3 -c 'import json; print(json.load(open("scripts/build-toolchain.json"))["rustMinimum"])')"
+          rustup toolchain install "$stable_toolchain" --profile minimal --component rustfmt,clippy
+          rustup default "$stable_toolchain"
           pin="snow-crates/crates/simd-paddle-ocr-rs/rust-toolchain.toml"
           ocr_toolchain="$(sed -nE 's/^channel = "(nightly-[0-9-]+)"/\1/p' "$pin")"
           test -n "$ocr_toolchain"
           rustup toolchain install "$ocr_toolchain" --profile minimal --component rustfmt,clippy
           rustc --version
 
-      - name: Cache Qt
-        uses: actions/cache@v4
+      - name: Restore Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v4
         with:
           path: .tools/Qt
           key: qt-linux-${{ hashFiles('scripts/qt-toolchain.json') }}
+          restore-keys: qt-linux-
 
-      - name: Cache vcpkg downloads and binary cache
-        uses: actions/cache@v4
+      - name: Restore vcpkg cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             .tools/vcpkg/downloads
@@ -160,6 +168,24 @@ jobs:
             snow-shot-*.tar.gz.sha256
           if-no-files-found: error
 
+      # Save caches even when a later step fails so a re-run can reuse the
+      # expensive bootstrap work.
+      - name: Save Qt cache
+        if: always() && steps.qt-cache.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+          path: .tools/Qt
+
+      - name: Save vcpkg cache
+        if: always() && steps.vcpkg-cache.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          path: |
+            .tools/vcpkg/downloads
+            .tools/vcpkg-bincache
+
   windows:
     name: Windows x64
     if: github.event_name == 'push' || inputs.platforms == 'both' || inputs.platforms == 'windows'
@@ -178,22 +204,29 @@ jobs:
           submodules: recursive
 
       - name: Install Rust components and OCR toolchain
+        # Match the documented workspace toolchain instead of the newer runner
+        # default; see the Linux job for the rationale.
         run: |
-          rustup component add rustfmt clippy
+          $stableToolchain = (Get-Content 'scripts/build-toolchain.json' -Raw | ConvertFrom-Json).rustMinimum
+          rustup toolchain install $stableToolchain --profile minimal --component rustfmt,clippy
+          rustup default $stableToolchain
           $pin = Get-Content 'snow-crates/crates/simd-paddle-ocr-rs/rust-toolchain.toml' -Raw
           $match = [regex]::Match($pin, '(?m)^channel\s*=\s*"(nightly-\d{4}-\d{2}-\d{2})"')
           if (-not $match.Success) { throw 'The OCR toolchain pin is missing.' }
           rustup toolchain install $match.Groups[1].Value --profile minimal --component rustfmt,clippy
           rustc --version
 
-      - name: Cache static Qt
-        uses: actions/cache@v4
+      - name: Restore static Qt cache
+        id: qt-cache
+        uses: actions/cache/restore@v4
         with:
           path: .tools/qt
           key: qt-windows-static-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/build-static-qt.ps1') }}
+          restore-keys: qt-windows-static-
 
-      - name: Cache vcpkg downloads and binary cache
-        uses: actions/cache@v4
+      - name: Restore vcpkg cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             .tools/vcpkg/downloads
@@ -248,6 +281,24 @@ jobs:
             snow-shot-*.zip
             snow-shot-*.zip.sha256
           if-no-files-found: error
+
+      # Static dependencies are the most expensive part of this job; persist
+      # them even when a later step fails so a re-run can skip the rebuild.
+      - name: Save static Qt cache
+        if: always() && steps.qt-cache.outcome == 'success' && steps.qt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
+          path: .tools/qt
+
+      - name: Save vcpkg cache
+        if: always() && steps.vcpkg-cache.outcome == 'success' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+          path: |
+            .tools/vcpkg/downloads
+            .tools/vcpkg-bincache
 
   publish:
     name: Attach assets to draft release
