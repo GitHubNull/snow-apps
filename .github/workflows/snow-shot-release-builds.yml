@@ -1,0 +1,288 @@
+name: Build Snow Shot release artifacts
+
+# Builds portable Snow Shot release trees on GitHub-hosted runners.
+# - Push a v* tag (for example v1.4.5_snow-shot) to build both platforms and
+#   attach the archives to a draft GitHub release for that tag.
+# - Run manually with an empty tag to only keep the workflow artifacts.
+# Releases are always created as drafts; publishing stays a manual step.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to build
+        type: choice
+        options:
+          - both
+          - linux
+          - windows
+        default: both
+      tag:
+        description: Tag to attach the archives to as a draft release. Leave empty to only keep workflow artifacts.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snow-shot-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: Linux x64
+    if: github.event_name == 'push' || inputs.platforms == 'both' || inputs.platforms == 'linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.tools/vcpkg-bincache,readwrite
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system packages
+        run: bash scripts/install-linux-system-deps.sh
+
+      - name: Select system libclang
+        # The bundled clang Python package ships libclang without the clang
+        # resource headers, which bindgen needs for FFmpeg bindings.
+        run: |
+          libclang_dir=""
+          for candidate in /usr/lib/llvm-*/lib/libclang.so; do
+            if [ -e "$candidate" ]; then
+              libclang_dir="$(dirname "$candidate")"
+              break
+            fi
+          done
+          if [ -z "$libclang_dir" ] || [ ! -d "$libclang_dir/clang" ]; then
+            echo "A libclang installation with resource headers was not found." >&2
+            exit 1
+          fi
+          echo "LIBCLANG_PATH=$libclang_dir" >> "$GITHUB_ENV"
+          echo "Using libclang from $libclang_dir"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Rust components and OCR toolchain
+        run: |
+          rustup component add rustfmt clippy
+          pin="snow-crates/crates/simd-paddle-ocr-rs/rust-toolchain.toml"
+          ocr_toolchain="$(sed -nE 's/^channel = "(nightly-[0-9-]+)"/\1/p' "$pin")"
+          test -n "$ocr_toolchain"
+          rustup toolchain install "$ocr_toolchain" --profile minimal --component rustfmt,clippy
+          rustc --version
+
+      - name: Cache Qt
+        uses: actions/cache@v4
+        with:
+          path: .tools/Qt
+          key: qt-linux-${{ hashFiles('scripts/qt-toolchain.json') }}
+
+      - name: Cache vcpkg downloads and binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools/vcpkg/downloads
+            .tools/vcpkg-bincache
+          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          restore-keys: vcpkg-linux-
+
+      - name: Bootstrap Linux toolchain
+        run: bash scripts/bootstrap-linux.sh
+
+      - name: Configure release build
+        # The preset enables SNOW_APPS_STRICT_COMPILE (-Werror), but the
+        # GCC-only warning set it adds has not been brought to zero in the
+        # shared sources; build with the verified Linux warning baseline.
+        run: .tools/venv/bin/cmake --preset linux-release -DSNOW_APPS_STRICT_COMPILE=OFF
+
+      - name: Build Snow Shot
+        run: .tools/venv/bin/cmake --build build/linux-release --target snow_shot --parallel "$(nproc)"
+
+      - name: Install and verify
+        run: |
+          .tools/venv/bin/cmake --install build/linux-release --prefix "$PWD/stage"
+          test -x stage/bin/snow_shot
+          test -f stage/bin/assets/ocr/asset-manifest.json
+          missing="$(ldd stage/bin/snow_shot | grep 'not found' || true)"
+          if [ -n "$missing" ]; then
+            printf 'Missing runtime libraries:\n%s\n' "$missing" >&2
+            exit 1
+          fi
+
+      - name: Smoke test startup
+        run: |
+          tmp="$(mktemp -d)"
+          export XDG_CONFIG_HOME="$tmp/config" XDG_DATA_HOME="$tmp/data"
+          QT_QPA_PLATFORM=offscreen ./build/linux-release/snow_shot/snow_shot \
+            --e2e-instance-id=ci-smoke >"$tmp/stdout.log" 2>"$tmp/stderr.log" &
+          pid=$!
+          sleep 10
+          if ! kill -0 "$pid" 2>/dev/null; then
+            cat "$tmp/stdout.log" "$tmp/stderr.log" >&2
+            echo "Snow Shot exited during startup" >&2
+            exit 1
+          fi
+          kill "$pid"
+          for _ in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          kill -9 "$pid" 2>/dev/null || true
+          wait "$pid" || true
+          rm -rf "$tmp"
+
+      - name: Package install tree
+        run: |
+          label="${RELEASE_TAG:-snapshot}"
+          name="snow-shot-${label}-linux-x64"
+          mkdir -p package
+          mv stage "package/$name"
+          tar -C package -czf "$name.tar.gz" "$name"
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow-shot-linux-x64
+          path: |
+            snow-shot-*.tar.gz
+            snow-shot-*.tar.gz.sha256
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    if: github.event_name == 'push' || inputs.platforms == 'both' || inputs.platforms == 'windows'
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.tools/vcpkg-bincache,readwrite
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust components and OCR toolchain
+        run: |
+          rustup component add rustfmt clippy
+          $pin = Get-Content 'snow-crates/crates/simd-paddle-ocr-rs/rust-toolchain.toml' -Raw
+          $match = [regex]::Match($pin, '(?m)^channel\s*=\s*"(nightly-\d{4}-\d{2}-\d{2})"')
+          if (-not $match.Success) { throw 'The OCR toolchain pin is missing.' }
+          rustup toolchain install $match.Groups[1].Value --profile minimal --component rustfmt,clippy
+          rustc --version
+
+      - name: Cache static Qt
+        uses: actions/cache@v4
+        with:
+          path: .tools/qt
+          key: qt-windows-static-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/build-static-qt.ps1') }}
+
+      - name: Cache vcpkg downloads and binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools/vcpkg/downloads
+            .tools/vcpkg-bincache
+          key: vcpkg-windows-static-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          restore-keys: vcpkg-windows-static-
+
+      - name: Bootstrap static dependencies
+        run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
+
+      - name: Build static Qt
+        run: |
+          ./scripts/build-static-qt.ps1 `
+            -InstallPrefix .tools/qt/6.12.0/msvc2026_64-static-system-codecs `
+            -Parallelism $env:NUMBER_OF_PROCESSORS
+
+      - name: Build Snow Shot
+        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -Target snow_shot
+
+      - name: Install and verify
+        run: |
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'stage'
+          cmake --install build/snow-shot-msvc-release --config Release --component SnowShot --prefix $stage
+          if (-not (Test-Path (Join-Path $stage 'bin/snow_shot.exe'))) { throw 'snow_shot.exe was not installed.' }
+          if (-not (Test-Path (Join-Path $stage 'bin/assets/ocr/asset-manifest.json'))) { throw 'The OCR asset manifest was not installed.' }
+          $qtDlls = @(Get-ChildItem (Join-Path $stage 'bin') -Filter 'Qt6*.dll' -ErrorAction SilentlyContinue)
+          if ($qtDlls.Count -gt 0) { throw "The static build deployed Qt runtime DLLs: $($qtDlls.Name -join ', ')" }
+
+      - name: Package portable tree
+        run: |
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'stage'
+          Remove-Item (Join-Path $stage 'bin/snow-ocr-process.exe') -Force -ErrorAction SilentlyContinue
+          Set-Content -LiteralPath (Join-Path $stage 'bin/__data_directory') -Value 'portable' -Encoding ascii -NoNewline
+          $label = if ($env:RELEASE_TAG) { $env:RELEASE_TAG } else { 'snapshot' }
+          $name = "snow-shot-$label-windows-x64"
+          New-Item -ItemType Directory -Path package -Force | Out-Null
+          Move-Item $stage (Join-Path package $name)
+          Push-Location package
+          try {
+            7z a -tzip "../$name.zip" "$name/*" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw '7z failed to create the portable archive.' }
+          }
+          finally { Pop-Location }
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name.zip" | Set-Content -LiteralPath "$name.zip.sha256" -Encoding ascii
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow-shot-windows-x64
+          path: |
+            snow-shot-*.zip
+            snow-shot-*.zip.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Attach assets to draft release
+    needs:
+      - linux
+      - windows
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'push' || inputs.tag != '') &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: snow-shot-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create draft release and upload archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+        run: |
+          ls -l dist
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --target "$GITHUB_SHA" \
+              --title "Snow Shot $RELEASE_TAG" \
+              --notes "Automated Snow Shot build from commit $GITHUB_SHA.
+
+          Assets are portable archives built from this commit. This release stays
+          a draft until the archives are verified and published manually."
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
