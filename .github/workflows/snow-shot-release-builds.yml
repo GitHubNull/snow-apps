@@ -41,6 +41,9 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.tools/vcpkg-bincache,readwrite
+      # Keep cached downloads outside the vcpkg clone, otherwise restoring the
+      # cache creates a non-git .tools/vcpkg and bootstrap refuses to clone it.
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.tools/vcpkg-downloads
     steps:
       - name: Check out sources
         uses: actions/checkout@v4
@@ -100,10 +103,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            .tools/vcpkg/downloads
+            .tools/vcpkg-downloads
             .tools/vcpkg-bincache
-          key: vcpkg-linux-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
-          restore-keys: vcpkg-linux-
+          key: vcpkg-linux-v2-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          restore-keys: vcpkg-linux-v2-
 
       - name: Bootstrap Linux toolchain
         run: bash scripts/bootstrap-linux.sh
@@ -194,6 +197,9 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/.tools/vcpkg-bincache,readwrite
+      # Keep cached downloads outside the vcpkg clone, otherwise restoring the
+      # cache creates a non-git .tools/vcpkg and bootstrap refuses to clone it.
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.tools/vcpkg-downloads
     defaults:
       run:
         shell: pwsh
@@ -229,10 +235,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            .tools/vcpkg/downloads
+            .tools/vcpkg-downloads
             .tools/vcpkg-bincache
-          key: vcpkg-windows-static-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
-          restore-keys: vcpkg-windows-static-
+          key: vcpkg-windows-static-v2-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          restore-keys: vcpkg-windows-static-v2-
 
       - name: Bootstrap static dependencies
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
