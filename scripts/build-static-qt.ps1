@@ -566,6 +566,11 @@ $sourceUrls = @(
 ) | Select-Object -Unique
 
 if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
+    $sourceParent = Split-Path -Parent $sourceDirectory
+    $extractedSourceDirectory = Join-Path $sourceParent "qt-everywhere-src-$QtVersion"
+    # The archive is downloaded next to the extracted source, so the parent
+    # directory must exist before the first mirror attempt.
+    New-Item -ItemType Directory -Force -Path $sourceParent | Out-Null
     if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
         $downloaded = $false
         foreach ($sourceUrl in $sourceUrls) {
@@ -585,9 +590,6 @@ if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
         }
     }
     Assert-QtSourceArchive -Path $archivePath
-    $sourceParent = Split-Path -Parent $sourceDirectory
-    $extractedSourceDirectory = Join-Path $sourceParent "qt-everywhere-src-$QtVersion"
-    New-Item -ItemType Directory -Force -Path $sourceParent | Out-Null
     if (-not (Test-Path -LiteralPath $extractedSourceDirectory -PathType Container)) {
         Invoke-Checked -Command "tar" -Arguments @("-xf", $archivePath, "-C", $sourceParent)
     }
