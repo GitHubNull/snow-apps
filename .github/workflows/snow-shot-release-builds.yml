@@ -262,6 +262,25 @@ jobs:
       - name: Build Snow Shot
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -Target snow_shot
 
+      - name: Fetch locked Rust dependencies
+        # The offline license audit resolves the full lock file, including
+        # dev-dependencies the release build never compiles (for example the
+        # criterion benchmark chain of snow-ocr-process), so warm the cache.
+        run: |
+          $repo = $env:GITHUB_WORKSPACE
+          $manifests = @(
+            (Join-Path $repo 'snow_rust_ffi/Cargo.toml'),
+            (Join-Path $repo 'snow_shot/rust/snow-shot-mcp/Cargo.toml'),
+            (Join-Path $repo 'snow_shot/rust/snow-shot-updater/Cargo.toml'))
+          foreach ($manifest in $manifests) {
+            & cargo fetch --locked --manifest-path $manifest
+            if ($LASTEXITCODE -ne 0) { throw "cargo fetch failed for $manifest" }
+          }
+          . (Join-Path $repo 'scripts/snow-ocr-toolchain.ps1')
+          & cargo "+$(Get-SnowOcrToolchain)" fetch --locked `
+            --manifest-path (Join-Path $repo 'snow-crates/crates/snow-ocr-process/Cargo.toml')
+          if ($LASTEXITCODE -ne 0) { throw 'cargo fetch failed for the OCR worker.' }
+
       - name: Collect third-party license bundle
         # The Windows install component embeds the collected notice bundle,
         # which package-snow-shot.ps1 normally generates before installing.
