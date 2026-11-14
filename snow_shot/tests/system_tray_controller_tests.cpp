@@ -159,6 +159,54 @@ void verifyCaptureDismissesTrayMenus(snow_shot::presentation::SystemTrayControll
     }
 }
 
+void verifyCaptureSuppressesTrayMenu(snow_shot::presentation::SystemTrayController& controller) {
+    auto* trayIcon =
+        controller.findChild<QSystemTrayIcon*>(QStringLiteral("snowShotSystemTrayIcon"));
+    require(trayIcon != nullptr, "capture suppression requires the tray icon");
+    controller.setMenuOptions(snow_shot::storage::TraySettings().menuOptions());
+
+    controller.setCaptureActive(QStringLiteral("selection"), true);
+    trayIcon->activated(QSystemTrayIcon::Context);
+    require(QApplication::activePopupWidget() == nullptr,
+            "a capture overlay must ignore tray context requests");
+    controller.setCaptureActive(QStringLiteral("selection"), false);
+
+    QPointer<adqt::widgets::AdContextMenu> menu = controller.createContextMenu();
+    menu->setNativeMenuEnabled(false);
+    menu->popupAt(QPoint(200, 200));
+    auto* groupAction = menuActionNamed(menu, QStringLiteral("systemTrayWindowGroupAction"));
+    require(groupAction && groupAction->menu(), "the tray should expose its group submenu");
+    QPointer<QMenu> submenu = groupAction->menu();
+    submenu->popup(QPoint(300, 200));
+    require(QApplication::activePopupWidget() == submenu.data(),
+            "the open group submenu must own popup input before the capture starts");
+    controller.setCaptureActive(QStringLiteral("selection"), true);
+    require(QApplication::activePopupWidget() == nullptr && !menu->isPopupVisible() &&
+                menu->isRetiring(),
+            "starting a capture must dismiss an open tray menu and its submenu");
+    drainMenus();
+    require(!menu && !submenu, "capture suppression must retire the transient tray menu tree");
+
+    trayIcon->activated(QSystemTrayIcon::Context);
+    require(QApplication::activePopupWidget() == nullptr,
+            "tray context requests stay ignored while a capture overlay is active");
+    controller.setCaptureActive(QStringLiteral("delay"), true);
+    controller.setCaptureActive(QStringLiteral("selection"), false);
+    trayIcon->activated(QSystemTrayIcon::Context);
+    require(QApplication::activePopupWidget() == nullptr,
+            "finishing one capture source must not re-enable the tray while another is active");
+#ifndef Q_OS_MACOS
+    controller.setCaptureActive(QStringLiteral("delay"), false);
+    trayIcon->activated(QSystemTrayIcon::Context);
+    require(QApplication::activePopupWidget() != nullptr,
+            "the tray context menu returns once the capture session ends");
+    QApplication::activePopupWidget()->close();
+    drainMenus();
+#else
+    controller.setCaptureActive(QStringLiteral("delay"), false);
+#endif
+}
+
 void verifyTrayMenuPosition() {
     using snow_shot::presentation::systemTrayMenuPosition;
     const QRect icon(1800, 1040, 24, 24);
@@ -928,6 +976,7 @@ int main(int argc, char* argv[]) {
     }
     if (application.arguments().contains(QStringLiteral("--capture-input-only"))) {
         verifyCaptureDismissesTrayMenus(controller);
+        verifyCaptureSuppressesTrayMenu(controller);
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
     }

@@ -1586,6 +1586,15 @@ class ApplicationController::Impl {
             QObject::connect(screenshotController.get(),
                              &ScreenshotController::captureActivityChanged, &floatingToolbar,
                              &presentation::FloatingToolbarController::setCaptureActive);
+            QObject::connect(screenshotController.get(),
+                             &ScreenshotController::captureActivityChanged, &systemTray,
+                             [this](const QString& source, bool active) {
+                                 // Only interactive screenshot overlays own the pointer.
+                                 if (source == QStringLiteral("selection") ||
+                                     source == QStringLiteral("delay")) {
+                                     systemTray.setCaptureActive(source, active);
+                                 }
+                             });
 #ifdef Q_OS_MACOS
             screenshotController->setRecordingPermissionCheck([this](bool microphone, bool input,
                                                                      bool notify) {

@@ -66,6 +66,8 @@ class SystemTrayController final : public QObject {
     [[nodiscard]] QStringList menuOptions() const;
     void setQuickActionChecked(GlobalShortcutAction action, bool checked);
     void setFocusedFullscreenSuppressionActive(bool active);
+    // A capture overlay owns the pointer; an open tray popup would grab it away.
+    void setCaptureActive(const QString& source, bool active);
 
   signals:
     void notificationDeliveryFinished(const snow_shot::platform::SystemNotificationRequest& request,

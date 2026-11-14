@@ -477,6 +477,8 @@ class SystemTrayController::Impl {
                              } else if (reason == QSystemTrayIcon::MiddleClick) {
                                  dispatchClickAction(middleClickAction);
                              } else if (reason == QSystemTrayIcon::Context) {
+                                 if (!captureSources.isEmpty())
+                                     return;
                                  if (menu && menu->isPopupVisible())
                                      return;
                                  auto* popup = createMenu();
@@ -534,6 +536,15 @@ class SystemTrayController::Impl {
         retranslateUi();
         setMenuOptions(menuOptions);
         return menu;
+    }
+
+    void dismissCaptureMenus() {
+        if (groupMenu && groupMenu->isPopupVisible())
+            groupMenu->dismissPopup();
+        for (const auto& popup : menus) {
+            if (popup && popup->isPopupVisible())
+                popup->dismissPopup();
+        }
     }
 
     void dispatchClickAction(const QString& action) {
@@ -878,6 +889,7 @@ class SystemTrayController::Impl {
     SystemTrayController& q;
     QPointer<adqt::widgets::AdContextMenu> menu;
     QList<QPointer<adqt::widgets::AdContextMenu>> menus;
+    QSet<QString> captureSources;
     QSystemTrayIcon* trayIcon = nullptr;
 #ifdef Q_OS_MACOS
     std::unique_ptr<platform::macos::SystemNotificationService> notifications;
@@ -1139,5 +1151,17 @@ void SystemTrayController::setFocusedFullscreenSuppressionActive(bool active) {
     }
     m_impl->focusedFullscreenSuppressionActive = active;
     m_impl->updateIcon();
+}
+
+void SystemTrayController::setCaptureActive(const QString& source, bool active) {
+    if (source.isEmpty())
+        return;
+    const bool wasActive = !m_impl->captureSources.isEmpty();
+    if (active)
+        m_impl->captureSources.insert(source);
+    else
+        m_impl->captureSources.remove(source);
+    if (!wasActive && !m_impl->captureSources.isEmpty())
+        m_impl->dismissCaptureMenus();
 }
 } // namespace snow_shot::presentation
