@@ -448,13 +448,17 @@ and minimal QPA platforms used by tests do not trip the gate.
 - Global mouse gestures run through XInput2 raw events on the root window and
   reuse the shared gesture engine. X11 cannot suppress the activation chord, so
   the activating modifiers and button also reach the target application.
-- Chinese input methods are prepared for the bundled Qt kit: the bootstrap
-  builds the fcitx5 Qt6 input-context plugin against Qt 6.12 (the distribution
-  plugin targets the distribution Qt and is rejected), and the install tree
-  whitelists it next to the ibus/compose plugins. Run
-  `sudo bash scripts/install-linux-system-deps.sh` once, then
-  `bash scripts/bootstrap-linux.sh`. Verify with fcitx5 (native plugin) and
-  with ibus before release.
+- Chinese input methods run through the fcitx5 Qt6 input-context plugin built
+  by `scripts/bootstrap-linux.sh` against the bundled Qt 6.12 kit (the
+  distribution plugin targets the distribution Qt and is rejected). The install
+  tree whitelists it next to the ibus/compose plugins. Verified on 2026-11-14
+  with fcitx5/rime: the app loads the plugin and `fcitx5-diagnose` reports
+  `program:snow_shot ... focus:1` while the settings search box is focused.
+  Qt 6.7+ prefers `QT_IM_MODULES`; if that variable omits `fcitx5`, start the
+  app with `QT_IM_MODULES=fcitx5` (or unset it and keep
+  `QT_IM_MODULE=fcitx5`). The ibus/compose plugins remain bundled as
+  fallbacks. The fcitx5 runtime libraries themselves are provided by the
+  distribution.
 - "Toggle Always on Top for the window under the cursor" uses EWMH
   `_NET_WM_STATE_ABOVE`; pinned-window group stacking orders the manager frames
   with `XConfigureWindow` inside each topmost/normal band; the full-screen

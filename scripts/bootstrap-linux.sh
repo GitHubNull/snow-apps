@@ -36,6 +36,9 @@ mkdir -p "$repo_root/.tools"
 if [[ ! -x "$venv/bin/python" ]]; then
     uv venv --python 3.12 "$venv"
 fi
+# CMake-driven dependency builds (including fcitx5-qt) resolve Ninja and the
+# compiler from PATH; keep the repository-local tools first.
+export PATH="$venv/bin:$PATH"
 uv pip install --python "$venv/bin/python" "cmake>=4.2,<5" ninja aqtinstall "clang-format==23.1.3" "libclang==18.1.1"
 cmake_version="$("$venv/bin/cmake" --version | head -n 1)"
 [[ "$cmake_version" =~ ^cmake[[:space:]]version[[:space:]]([0-9]+)\.([0-9]+) ]] ||
@@ -112,12 +115,21 @@ if [[ "$skip_qt" == 0 && ! -f "$fcitx5_qt_plugin" ]]; then
         git clone --depth 1 --branch "$fcitx5_qt_version" \
             https://github.com/fcitx/fcitx5-qt.git "$fcitx5_qt_root/src"
     fi
+    # Qt 6.12's `find_package(Qt6Gui ... Private)` does not create
+    # Qt6::GuiPrivate for this project layout; request the private package
+    # explicitly. The Wayland workaround needs a private Wayland target this
+    # kit does not export, and the X11 plugin does not require it.
+    if ! grep -q 'find_package(Qt6GuiPrivate' "$fcitx5_qt_root/src/qt6/CMakeLists.txt"; then
+        sed -i '/find_package(Qt6Gui ${REQUIRED_QT6_VERSION} REQUIRED Private)/a find_package(Qt6GuiPrivate ${REQUIRED_QT6_VERSION} REQUIRED)' \
+            "$fcitx5_qt_root/src/qt6/CMakeLists.txt"
+    fi
     "$venv/bin/cmake" -S "$fcitx5_qt_root/src" -B "$fcitx5_qt_root/build" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH="$qt_dir" \
         -DCMAKE_INSTALL_PREFIX="$qt_dir" \
         -DENABLE_QT4=OFF -DENABLE_QT5=OFF -DENABLE_QT6=ON \
-        -DBUILD_TESTING=OFF
+        -DENABLE_QT6_WAYLAND_WORKAROUND=OFF \
+        -DBUILD_ONLY_PLUGIN=ON
     "$venv/bin/cmake" --build "$fcitx5_qt_root/build" -j "$(nproc)"
     "$venv/bin/cmake" --install "$fcitx5_qt_root/build"
     if [[ ! -f "$fcitx5_qt_plugin" ]]; then

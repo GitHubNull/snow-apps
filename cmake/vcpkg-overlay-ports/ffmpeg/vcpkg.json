@@ -664,7 +664,11 @@
         {
           "name": "ffmpeg",
           "default-features": false,
-          "features": ["amf", "nvcodec", "qsv"],
+          "features": [
+            "amf",
+            "nvcodec",
+            "qsv"
+          ],
           "platform": "x64"
         },
         {
@@ -820,6 +824,33 @@
     "snow-macos-media": {
       "description": "Standalone macOS capture recording and export codecs with VideoToolbox and software fallbacks",
       "supports": "osx",
+      "dependencies": [
+        {
+          "name": "ffmpeg",
+          "default-features": false,
+          "features": [
+            "avcodec",
+            "avfilter",
+            "avformat",
+            "swresample",
+            "swscale",
+            "webp",
+            "x264",
+            "x265",
+            "zlib"
+          ]
+        },
+        {
+          "name": "x265",
+          "features": [
+            "main10"
+          ]
+        }
+      ]
+    },
+    "snow-linux-media": {
+      "description": "Standalone Linux screen recording/export codecs with software H.264/H.265 fallbacks",
+      "supports": "linux",
       "dependencies": [
         {
           "name": "ffmpeg",

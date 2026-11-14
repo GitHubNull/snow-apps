@@ -683,6 +683,23 @@ if("snow-shot-minimal" IN_LIST FEATURES)
     )
 endif()
 
+if("snow-linux-media" IN_LIST FEATURES)
+    if(NOT VCPKG_TARGET_IS_LINUX)
+        message(FATAL_ERROR "ffmpeg[snow-linux-media] requires Linux")
+    endif()
+    string(APPEND OPTIONS
+        " --disable-network"
+        " --enable-decoder=h264,hevc,mpeg4,gif,png,apng,webp,webp_anim,aac,pcm_s16le,pcm_f32le"
+        " --enable-encoder=libx264,libx265,mpeg4,gif,apng,libwebp_anim,aac,pcm_s16le"
+        " --enable-muxer=matroska,mp4,avi,gif,apng,webp,wav"
+        " --enable-demuxer=matroska,mov,avi,gif,apng,webp,webp_anim,wav"
+        " --enable-parser=h264,hevc,aac,mpegaudio,gif"
+        " --enable-bsf=h264_mp4toannexb,hevc_mp4toannexb,aac_adtstoasc"
+        " --enable-protocol=file"
+        " --enable-filter=abuffer,abuffersink,atempo"
+    )
+endif()
+
 if("snow-macos-media" IN_LIST FEATURES)
     if(NOT VCPKG_TARGET_IS_OSX)
         message(FATAL_ERROR "ffmpeg[snow-macos-media] requires macOS")
