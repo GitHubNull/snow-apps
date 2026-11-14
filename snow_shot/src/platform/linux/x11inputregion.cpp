@@ -85,4 +85,32 @@ bool setWindowInputHole(QWidget* widget, const QRect& hole) {
     return setWindowInputRegion(widget, region);
 }
 
+bool setWindowInputEnabled(QWidget* widget, bool enabled) {
+    if (widget == nullptr) {
+        return false;
+    }
+    X11Connection connection;
+    Display* display = connection.display();
+    if (display == nullptr) {
+        return false;
+    }
+    const Window window = static_cast<Window>(widget->winId());
+    if (window == None) {
+        return false;
+    }
+    int eventBase = 0;
+    int errorBase = 0;
+    if (!XShapeQueryExtension(display, &eventBase, &errorBase)) {
+        return false;
+    }
+    if (enabled) {
+        // None restores the default, unbounded input region.
+        XShapeCombineMask(display, window, ShapeInput, 0, 0, None, ShapeSet);
+    } else {
+        XShapeCombineRectangles(display, window, ShapeInput, 0, 0, nullptr, 0, ShapeSet, Unsorted);
+    }
+    XFlush(display);
+    return true;
+}
+
 } // namespace snow_shot::platform::x11

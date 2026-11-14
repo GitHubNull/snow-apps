@@ -1,9 +1,14 @@
 #include "snow_shot/presentation/selectedtexttranslationcontroller.h"
 
+#if defined(Q_OS_LINUX)
+#include "snow_shot/presentation/linuxselectedtextbackend.h"
+#else
 #include "snow_selected_text.h"
+#endif
 #include <QCoreApplication>
 
 namespace snow_shot::presentation {
+#if !defined(Q_OS_LINUX)
 namespace {
 // Existing platforms retain the established clipboard-only path and its shorter budget.
 // macOS keeps the FFI defaults so Accessibility runs before guarded clipboard fallback.
@@ -128,10 +133,17 @@ class NativeSelectedTextCaptureBackend final : public SelectedTextCaptureBackend
         m_request{nullptr, snow_selected_text_request_destroy};
 };
 } // namespace
+#endif // !Q_OS_LINUX
 
 SelectedTextTranslationController::SelectedTextTranslationController(QObject* parent)
+#if defined(Q_OS_LINUX)
+    : SelectedTextTranslationController(
+          std::make_unique<LinuxSelectedTextCaptureBackend>(createPrimarySelectionTextReader()),
+          parent) {}
+#else
     : SelectedTextTranslationController(std::make_unique<NativeSelectedTextCaptureBackend>(),
                                         parent) {}
+#endif
 
 SelectedTextTranslationController::SelectedTextTranslationController(
     std::unique_ptr<SelectedTextCaptureBackend> backend, QObject* parent)

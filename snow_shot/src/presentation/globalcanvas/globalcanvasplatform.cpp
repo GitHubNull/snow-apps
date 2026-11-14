@@ -4,6 +4,9 @@
 #ifdef Q_OS_WIN
 #include "../../platform/windows/pinnedwindownative.h"
 #endif
+#ifdef Q_OS_LINUX
+#include "snow_shot/platform/linux/x11inputregion.h"
+#endif
 
 namespace snow_shot::presentation {
 #ifdef Q_OS_MACOS
@@ -31,6 +34,13 @@ bool setGlobalCanvasInputTransparent(QWidget* window, bool transparent) {
         native.hidesOnDeactivate = NO;
         native.collectionBehavior = globalCanvasCollectionBehavior(native.collectionBehavior);
         return native.ignoresMouseEvents == transparent;
+    }
+#elif defined(Q_OS_LINUX)
+    if (QGuiApplication::platformName() == QStringLiteral("xcb")) {
+        // X11 has no whole-window click-through flag; an empty input shape
+        // leaves the painted canvas visible while every pointer event passes
+        // through to the windows underneath.
+        return snow_shot::platform::x11::setWindowInputEnabled(window, !transparent);
     }
 #else
     Q_UNUSED(window);

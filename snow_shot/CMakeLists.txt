@@ -832,6 +832,8 @@ add_library(snow_shot_translation STATIC
     src/app/translationservice.cpp
     include/snow_shot/presentation/selectedtexttranslationcontroller.h
     src/presentation/services/selectedtexttranslationcontroller.cpp
+    include/snow_shot/presentation/linuxselectedtextbackend.h
+    src/presentation/services/linuxselectedtextbackend.cpp
     include/snow_shot/network/snowshotapiclient.h
     src/network/boundednetworkresponse.h
     src/network/snowshotapiclient.cpp
@@ -844,6 +846,10 @@ snow_enable_unity_build(snow_shot_translation)
 target_include_directories(snow_shot_translation PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(snow_shot_translation PUBLIC snow_shot_storage Qt6::Network
     PRIVATE snow_selected_text_c snow_language_detection_c)
+if(UNIX AND NOT APPLE)
+    # The Linux selected-text backend reads the X11 PRIMARY selection on a worker.
+    target_link_libraries(snow_shot_translation PRIVATE snow_shot_linux_x11)
+endif()
 target_compile_definitions(snow_shot_translation PRIVATE
     SNOW_SHOT_API_BASE_URL=\"${SNOW_SHOT_API_BASE_URL}\"
 )
@@ -1067,7 +1073,10 @@ if(UNIX AND NOT APPLE)
         include/snow_shot/platform/linux/scrollinput.h
         src/platform/linux/scrollinput.cpp
         include/snow_shot/platform/linux/x11inputregion.h
-        src/platform/linux/x11inputregion.cpp)
+        src/platform/linux/x11inputregion.cpp
+        include/snow_shot/platform/linux/windowalwaysontop.h
+        src/platform/linux/windowalwaysontop.cpp
+        src/platform/linux/x11primaryselection.cpp)
     target_include_directories(snow_shot_linux_x11
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_include_directories(snow_shot_linux_x11
@@ -1077,7 +1086,9 @@ if(UNIX AND NOT APPLE)
     # The backends include X11 headers whose None/True/False/Status macros would
     # poison every file sharing their unity translation unit.
     set_source_files_properties(src/platform/linux/scrollinput.cpp
-        src/platform/linux/x11inputregion.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+        src/platform/linux/x11inputregion.cpp
+        src/platform/linux/windowalwaysontop.cpp
+        src/platform/linux/x11primaryselection.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/presentation/components/screenshothistorypagewidget.cpp"
      _snow_shot_history_source)
@@ -1300,6 +1311,13 @@ if(APPLE)
         "${SNOW_SHOT_CARBON_FRAMEWORK}"
         "${SNOW_SHOT_APPKIT_FRAMEWORK}"
         "${SNOW_SHOT_CORE_GRAPHICS_FRAMEWORK}")
+endif()
+if(UNIX AND NOT APPLE)
+    target_sources(snow_shot_global_mouse PRIVATE
+        src/platform/linux/globalmousebackend.cpp)
+    target_link_libraries(snow_shot_global_mouse PRIVATE X11::X11 X11::Xi)
+    set_source_files_properties(src/platform/linux/globalmousebackend.cpp
+        PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 target_link_libraries(snow_shot_settings PRIVATE snow_shot_global_mouse)
 snow_enable_unity_build(snow_shot_settings)
@@ -2205,7 +2223,8 @@ elseif(UNIX)
         src/platform/linux/windowcaptureexclusion.cpp
         src/platform/linux/capturewindowshield.cpp
         src/presentation/capture/directcaptureqtx11.cpp
-        src/presentation/capture/screenshotqtcaptureprovider.cpp)
+        src/presentation/capture/screenshotqtcaptureprovider.cpp
+        src/presentation/selector/linuxselectorpolicy.cpp)
 endif()
 
 include(SnowSimd)
@@ -2274,8 +2293,18 @@ target_link_libraries(snow_shot PRIVATE
     MINIZIP::minizip-ng
 )
 if(UNIX AND NOT APPLE)
-    # The Linux capture path grabs through the shared X11 helpers.
+    # The Linux capture path grabs through the shared X11 helpers, and live
+    # pinned windows name their offscreen pixmaps through XComposite.
     target_link_libraries(snow_shot PRIVATE snow_shot_linux_x11)
+    if(X11_Xcomposite_FOUND)
+        target_link_libraries(snow_shot PRIVATE X11::Xcomposite)
+    else()
+        message(FATAL_ERROR
+            "XComposite is required for live pinned window capture. Install libxcomposite-dev.")
+    endif()
+    set_source_files_properties(src/platform/linux/livewindownative.cpp
+        src/presentation/pinned/pinnedwindowstackingplatform.cpp
+        PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowShotUpdates.cmake")
 if(WIN32)
@@ -3763,6 +3792,9 @@ if(SNOW_SHOT_BUILD_TESTS)
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
 
+    # The selector service itself is native on Windows/macOS. Linux compiles the
+    # X11/visual client for link coverage, while its behavior is covered by
+    # snow-shot-linux-selector-tests.
     add_executable(snow-shot-window-element-api-tests
         tests/window_element_api_tests.cpp
         include/snow_shot/presentation/screenshotselectorcoordinator.h
@@ -3791,8 +3823,38 @@ if(SNOW_SHOT_BUILD_TESTS)
         target_link_libraries(snow-shot-window-element-api-tests PRIVATE
             "-framework CoreGraphics" "-framework AppKit")
     endif()
-    add_test(NAME snow-shot-window-element-api-tests
-             COMMAND snow-shot-window-element-api-tests)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(snow-shot-window-element-api-tests PRIVATE
+            src/presentation/selector/linuxselectorpolicy.cpp)
+        target_include_directories(snow-shot-window-element-api-tests PRIVATE
+            "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-visual-region-detector-c/include")
+        target_link_libraries(snow-shot-window-element-api-tests PRIVATE
+            snow_visual_region_detector_c)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(snow-shot-linux-selector-tests
+            tests/linux_selector_policy_tests.cpp
+            src/presentation/selector/linuxselectorpolicy.cpp
+            src/presentation/selector/linuxselectorpolicy.h
+        )
+        target_include_directories(snow-shot-linux-selector-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        target_link_libraries(snow-shot-linux-selector-tests PRIVATE Qt6::Gui)
+        add_test(NAME snow-shot-linux-selector-tests
+            COMMAND snow-shot-linux-selector-tests)
+        set_tests_properties(snow-shot-linux-selector-tests PROPERTIES LABELS "unit"
+            TIMEOUT 30)
+    endif()
+
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME snow-shot-window-element-api-tests
+                 COMMAND snow-shot-window-element-api-tests)
+        add_test(NAME snow-shot-selector-phased-tests
+                 COMMAND snow-shot-window-element-api-tests --selector-only)
+        add_test(NAME snow-shot-selector-lifecycle-tests
+                 COMMAND snow-shot-window-element-api-tests --selector-lifecycle-only)
+    endif()
     add_test(NAME snow-shot-recording-api-settings-tests
         COMMAND snow-shot-window-element-api-tests --recording-api-only -platform offscreen)
     set_tests_properties(snow-shot-recording-api-settings-tests PROPERTIES LABELS "unit" TIMEOUT 30
@@ -3800,10 +3862,6 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-smart-selection-settings-tests
         COMMAND snow-shot-window-element-api-tests --smart-selection-only)
     set_tests_properties(snow-shot-smart-selection-settings-tests PROPERTIES LABELS "unit" TIMEOUT 30)
-    add_test(NAME snow-shot-selector-phased-tests
-             COMMAND snow-shot-window-element-api-tests --selector-only)
-    add_test(NAME snow-shot-selector-lifecycle-tests
-             COMMAND snow-shot-window-element-api-tests --selector-lifecycle-only)
     add_test(NAME snow-shot-shortcut-exit-confirmation-settings-tests
              COMMAND snow-shot-window-element-api-tests
                      --shortcut-exit-confirmation-settings-only)
@@ -3813,10 +3871,7 @@ if(SNOW_SHOT_BUILD_TESTS)
              COMMAND snow-shot-window-element-api-tests --guide-settings-only)
     snow_shot_import_offscreen_platform(snow-shot-window-element-api-tests)
     set_tests_properties(
-        snow-shot-window-element-api-tests
         snow-shot-smart-selection-settings-tests
-        snow-shot-selector-phased-tests
-        snow-shot-selector-lifecycle-tests
         snow-shot-shortcut-exit-confirmation-settings-tests
         snow-shot-auto-qr-settings-tests
         snow-shot-screenshot-guide-settings-reset-tests
@@ -3826,6 +3881,18 @@ if(SNOW_SHOT_BUILD_TESTS)
         ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set_tests_properties(
+            snow-shot-window-element-api-tests
+            snow-shot-selector-phased-tests
+            snow-shot-selector-lifecycle-tests
+            PROPERTIES
+            ENVIRONMENT
+                "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+        )
+    endif()
 
     add_executable(snow-shot-system-tray-controller-tests
         tests/system_tray_controller_tests.cpp
@@ -9642,17 +9709,37 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-selected-text-translation-tests PROPERTIES LABELS "unit" TIMEOUT 30)
 
     # Compile the production backend against a fake C boundary; do not link the Rust runtime.
-    add_executable(snow-shot-selected-text-strategy-tests
-        tests/selected_text_strategy_tests.cpp
-        src/presentation/services/selectedtexttranslationcontroller.cpp
-        include/snow_shot/presentation/selectedtexttranslationcontroller.h)
-    target_include_directories(snow-shot-selected-text-strategy-tests PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-selected-text-c/include")
-    target_link_libraries(snow-shot-selected-text-strategy-tests PRIVATE Qt6::Core)
-    add_test(NAME snow-shot-selected-text-strategy-tests
-        COMMAND snow-shot-selected-text-strategy-tests)
-    set_tests_properties(snow-shot-selected-text-strategy-tests PROPERTIES LABELS "unit" TIMEOUT 30)
+    # Linux replaces this native strategy with the PRIMARY-selection backend below.
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(snow-shot-selected-text-strategy-tests
+            tests/selected_text_strategy_tests.cpp
+            src/presentation/services/selectedtexttranslationcontroller.cpp
+            include/snow_shot/presentation/selectedtexttranslationcontroller.h)
+        target_include_directories(snow-shot-selected-text-strategy-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include"
+            "${SNOW_SHOT_CAPTURE_CRATES_DIR}/crates/snow-selected-text-c/include")
+        target_link_libraries(snow-shot-selected-text-strategy-tests PRIVATE Qt6::Core)
+        add_test(NAME snow-shot-selected-text-strategy-tests
+            COMMAND snow-shot-selected-text-strategy-tests)
+        set_tests_properties(snow-shot-selected-text-strategy-tests PROPERTIES LABELS "unit"
+            TIMEOUT 30)
+    endif()
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(snow-shot-selected-text-linux-tests
+            tests/linux_selected_text_tests.cpp
+            src/presentation/services/linuxselectedtextbackend.cpp
+            src/presentation/services/selectedtexttranslationcontroller.cpp
+            include/snow_shot/presentation/linuxselectedtextbackend.h
+            include/snow_shot/presentation/selectedtexttranslationcontroller.h)
+        target_include_directories(snow-shot-selected-text-linux-tests PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        target_link_libraries(snow-shot-selected-text-linux-tests PRIVATE Qt6::Core)
+        add_test(NAME snow-shot-selected-text-linux-tests
+            COMMAND snow-shot-selected-text-linux-tests)
+        set_tests_properties(snow-shot-selected-text-linux-tests PROPERTIES LABELS "unit"
+            TIMEOUT 30)
+    endif()
 
     add_executable(snow-shot-translation-page-controller-tests
         tests/translation_page_controller_tests.cpp
@@ -11515,6 +11602,7 @@ elseif(UNIX AND NOT APPLE AND NOT SNOW_SHOT_QT_STATIC)
             platformthemes/libqxdgdesktopportal.so
             platforminputcontexts/libcomposeplatforminputcontextplugin.so
             platforminputcontexts/libibusplatforminputcontextplugin.so
+            platforminputcontexts/libfcitx5platforminputcontextplugin.so
             tls/libqcertonlybackend.so
             tls/libqopensslbackend.so
             networkinformation/libqconnman.so
@@ -13786,6 +13874,18 @@ if(SNOW_SHOT_BUILD_TESTS)
                 LABELS "benchmark;macos" RUN_SERIAL TRUE SKIP_RETURN_CODE 77 TIMEOUT 180
                 ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
         endif()
+    endif()
+    if(UNIX AND NOT APPLE)
+        add_executable(snow-shot-live-window-x11-tests
+            tests/live_window_x11_tests.cpp
+            src/platform/linux/livewindownative.cpp)
+        target_include_directories(snow-shot-live-window-x11-tests PRIVATE include src)
+        target_link_libraries(snow-shot-live-window-x11-tests PRIVATE Qt6::Gui
+            snow_shot_linux_x11 X11::Xcomposite)
+        add_test(NAME snow-shot-live-window-x11-tests
+            COMMAND snow-shot-live-window-x11-tests)
+        set_tests_properties(snow-shot-live-window-x11-tests PROPERTIES
+            LABELS "interactive;linux" SKIP_RETURN_CODE 77 TIMEOUT 60)
     endif()
     add_executable(snow-shot-live-window-geometry-tests tests/live_window_geometry_tests.cpp)
     target_include_directories(snow-shot-live-window-geometry-tests PRIVATE include)

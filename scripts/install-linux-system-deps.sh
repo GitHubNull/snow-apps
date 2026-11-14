@@ -35,7 +35,8 @@ packages=(
     libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev
     libxkbcommon-dev libxkbcommon-x11-dev
     libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev libxi-dev
-    libxtst-dev libxrender-dev libsm-dev libice-dev
+    libxtst-dev libxrender-dev libxcomposite-dev libxdamage-dev libxrandr-dev
+    libsm-dev libice-dev
     libxcb1-dev libxcb-cursor-dev libxcb-cursor0
     libxcb-icccm4-dev libxcb-image0-dev libxcb-keysyms1-dev
     libxcb-randr0-dev libxcb-render-util0-dev libxcb-shape0-dev
@@ -43,6 +44,10 @@ packages=(
     libxcb-sync-dev libxcb-glx0-dev
     libdbus-1-dev libfontconfig1-dev libfreetype-dev
     libssl-dev libvulkan1 libvulkan-dev
+    # Platform integration: fcitx5 Qt6 input method, PulseAudio capture, CUPS printing.
+    extra-cmake-modules
+    libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev libfcitx5-qt6-dev
+    libpulse-dev libcups2-dev
 )
 
 if [[ "$(id -u)" -eq 0 ]]; then

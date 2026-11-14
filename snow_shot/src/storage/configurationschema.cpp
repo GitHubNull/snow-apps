@@ -589,7 +589,7 @@ const QVector<ConfigurationSchemaEntry> kRawEntries = {
      {},
      2},
 #endif
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
     {QStringLiteral("global_shortcuts/toggle_window_under_cursor_always_on_top"),
      QJsonArray(),
      ConfigurationValueKind::StringList,
@@ -1674,7 +1674,9 @@ const QVector<ConfigurationSchemaEntry> kRawEntries = {
       QStringLiteral("quick.screenshot-full-screen"),
       QStringLiteral("quick.screenshot-focused-window"),
       QStringLiteral("quick.pin-clipboard-content"),
+#if !defined(Q_OS_LINUX)
       QStringLiteral("quick.pin-selected-files"),
+#endif
       QStringLiteral("quick.restore-last-closed-windows"),
       QStringLiteral("quick.hide-show-all-windows"),
       QStringLiteral("quick.open-pin-to-screen-management"),
@@ -1686,9 +1688,7 @@ const QVector<ConfigurationSchemaEntry> kRawEntries = {
       QStringLiteral("quick.stitch-selected-images"),
       QStringLiteral("quick.split-selected-images"),
       QStringLiteral("quick.translate-selected-text"),
-#ifdef Q_OS_WIN
       QStringLiteral("quick.toggle-window-under-cursor-always-on-top"),
-#endif
       QStringLiteral("quick.toggle-global-hotkeys"),
       QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window"),
       QStringLiteral("tray.window-grouping"),

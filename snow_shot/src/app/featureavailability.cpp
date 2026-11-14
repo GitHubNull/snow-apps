@@ -77,12 +77,10 @@ FeatureFamily featureFamilyFor(presentation::settings::SettingsGlobalMouseAction
 
 bool isFeatureAvailable(FeatureFamily feature) {
 #if defined(Q_OS_LINUX)
-    // The Linux build has no native screen-recording backend, and screen
-    // capture requires an X11 session.
-    if (feature == FeatureFamily::ScreenRecording) {
-        return false;
-    }
-    if (feature == FeatureFamily::Screenshot && captureBlockedByWaylandSession()) {
+    // X11 provides both the screenshot and recording capture paths. Wayland
+    // sessions cannot be captured without a portal backend.
+    if ((feature == FeatureFamily::Screenshot || feature == FeatureFamily::ScreenRecording) &&
+        captureBlockedByWaylandSession()) {
         return false;
     }
     return true;

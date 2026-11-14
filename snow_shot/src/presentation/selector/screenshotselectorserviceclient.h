@@ -15,6 +15,11 @@
 #include <functional>
 #include <memory>
 
+#if defined(Q_OS_LINUX)
+#include <QMutex>
+#include <QThreadPool>
+#endif
+
 typedef struct SnowUiSelectorServiceImpl SnowUiSelectorService;
 struct SnowUiSelectorEvent;
 
@@ -57,6 +62,17 @@ class ScreenshotSelectorServiceClient final : public QObject {
 #ifdef Q_OS_MACOS
     QVector<std::uintptr_t> m_excludedWindowIds;
     QVector<CapturedDisplayModel> m_displays;
+#endif
+#if defined(Q_OS_LINUX)
+    void handleLinuxHitTest(quint64 epoch, quint64 requestId, quint64 generation,
+                            const QPoint& physicalPoint, ScreenshotSelectorHitTestMode mode,
+                            quint32 displayId, const QVector<CapturedDisplayModel>& displays,
+                            const QVector<std::uintptr_t>& excluded);
+    QVector<CapturedDisplayModel> m_displays;
+    QVector<std::uintptr_t> m_excluded;
+    QThreadPool m_pool;
+    QHash<quintptr, QVector<QRect>> m_detectionCache;
+    QMutex m_detectionMutex;
 #endif
 };
 

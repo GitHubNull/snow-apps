@@ -99,6 +99,8 @@
 #ifdef Q_OS_WIN
 #include "snow_shot/platform/windows/windowalwaysontop.h"
 #include <qt_windows.h>
+#elif defined(Q_OS_LINUX)
+#include "snow_shot/platform/linux/windowalwaysontop.h"
 #endif
 
 namespace snow_shot::app {
@@ -2040,6 +2042,9 @@ class ApplicationController::Impl {
         case presentation::GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop:
 #ifdef Q_OS_WIN
             static_cast<void>(platform::windows::toggleWindowUnderCursorAlwaysOnTop(
+                &ScreenshotPinnedWindow::toggleAlwaysOnTopForSurface));
+#elif defined(Q_OS_LINUX)
+            static_cast<void>(platform::linux::toggleWindowUnderCursorAlwaysOnTop(
                 &ScreenshotPinnedWindow::toggleAlwaysOnTopForSurface));
 #endif
             break;

@@ -1101,7 +1101,7 @@ SettingsItemDefinition updateModeItem() {
             payload};
 }
 
-#ifndef Q_OS_MACOS
+#if defined(Q_OS_WIN)
 SettingsItemDefinition screenshotApiModeItem() {
     SettingsSelectDefinition payload;
     payload.binding = SettingsSelectBinding::ScreenshotApiMode;
@@ -1189,14 +1189,22 @@ SettingsItemDefinition pinnedHistoryEnabledItem() {
 }
 
 SettingsItemDefinition smartSelectionItem() {
+#ifdef Q_OS_LINUX
+    const QVector<TranslatableText> detail = {
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Child elements")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Visual"))};
+#else
+    const QVector<TranslatableText> detail = {
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Child elements")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "MSAA"))};
+#endif
     return {
         QStringLiteral("screenshot.smart-selection"),
         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Smart selection")),
         settingsText(QT_TRANSLATE_NOOP(
             "SettingsCatalog",
             "Choose automatic window or window sub-element selection, or select manually")),
-        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Child elements")),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "MSAA"))},
+        detail,
         QStringLiteral("screenshot_selection/smart_selection"),
         SettingsSelectDefinition{
             SettingsSelectBinding::SmartSelection,
@@ -1234,7 +1242,7 @@ SettingsItemDefinition translateSelectedTextItem() {
 }
 #endif
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
 SettingsItemDefinition toggleWindowUnderCursorAlwaysOnTopItem() {
     return quickActionItem(
         QStringLiteral("quick.toggle-window-under-cursor-always-on-top"),
@@ -3294,7 +3302,7 @@ QVector<SettingsPageDefinition> builtInPages() {
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
                         translateSelectedTextItem(),
 #endif
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
                         toggleWindowUnderCursorAlwaysOnTopItem(),
 #endif
                         toggleGlobalHotkeysItem(),
@@ -3631,7 +3639,7 @@ QVector<SettingsPageDefinition> builtInPages() {
                   "SettingsCatalog", "Include the pointer and capture controls in screenshots")),
               SettingsSectionReset::ScreenshotCaptureBehavior,
               {screenshotShowCursorItem(), screenshotCaptureUiInScrollingScreenshotItem()}},
-#ifndef Q_OS_MACOS
+#if defined(Q_OS_WIN)
              {QStringLiteral("capture-compatibility"),
               settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Advanced capture")),
               settingsText(QT_TRANSLATE_NOOP(
@@ -3740,7 +3748,7 @@ QVector<SettingsPageDefinition> builtInPages() {
                  SettingsSectionReset::ScreenRecordingCapture,
                  {
                      screenRecordingCaptureToolbarItem(),
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_WIN
                      screenRecordingApiModeItem(),
 #endif
                  },
@@ -4699,6 +4707,17 @@ QVector<SettingsTrayMenuGroupDefinition> SettingsCatalog::trayMenuGroups() const
             }
         }
     }
+#if defined(Q_OS_LINUX)
+    // Native file pinning has no Linux backend; keep the tray groups aligned
+    // with the compact command manifest that hides it.
+    for (auto& group : groups) {
+        group.options.removeIf([](const SettingsTrayMenuOptionDefinition& option) {
+            return option.shortcutAction == GlobalShortcutAction::PinSelectedFiles;
+        });
+    }
+    groups.removeIf(
+        [](const SettingsTrayMenuGroupDefinition& group) { return group.options.isEmpty(); });
+#endif
 
     SettingsTrayMenuGroupDefinition systemGroup;
     systemGroup.id = QStringLiteral("system");
@@ -4863,7 +4882,7 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
                 QT_TRANSLATE_NOOP("SettingsCatalog", "Translate Selected Text"),
                 GlobalShortcutAction::TranslateSelectedText,
                 []() { return custom_outlined_icons::OcrTranslate(); }),
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
           quick(QStringLiteral("quick.toggle-window-under-cursor-always-on-top"),
                 QT_TRANSLATE_NOOP("SettingsCatalog",
                                   "Toggle Always on Top for the Window Under the Cursor"),
@@ -4919,10 +4938,7 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
 #if defined(Q_OS_LINUX)
     // Recording and native file pinning have no Linux backends, so their tray
     // commands and quick-action cards would only ever report failures.
-    constexpr std::array<GlobalShortcutAction, 4> kLinuxUnavailableQuickActions{
-        GlobalShortcutAction::ScreenRecord,
-        GlobalShortcutAction::ScreenRecordCopy,
-        GlobalShortcutAction::OpenScreenRecordingFolder,
+    constexpr std::array<GlobalShortcutAction, 1> kLinuxUnavailableQuickActions{
         GlobalShortcutAction::PinSelectedFiles,
     };
     for (auto& group : manifest.groups) {

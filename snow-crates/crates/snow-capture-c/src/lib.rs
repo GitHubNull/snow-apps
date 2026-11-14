@@ -662,6 +662,7 @@ fn capture_backend_value(kind: CaptureBackendKind) -> u8 {
         CaptureBackendKind::WindowsGraphicsCapture => 2,
         CaptureBackendKind::Gdi => 3,
         CaptureBackendKind::ScreenCaptureKit => 4,
+        CaptureBackendKind::X11 => 5,
     }
 }
 
@@ -1386,6 +1387,7 @@ fn backend_kind_ptr(session: &SnowCaptureDesktopSessionImpl) -> *const c_char {
         "wgc" => c"wgc".as_ptr(),
         "gdi" => c"gdi".as_ptr(),
         "sck" => c"sck".as_ptr(),
+        "x11" => c"x11".as_ptr(),
         _ => c"unknown".as_ptr(),
     }
 }
@@ -1399,7 +1401,15 @@ fn native_window_id(value: isize) -> Result<WindowId, String> {
             .map(WindowId::from_macos_id)
             .ok_or_else(|| "invalid macOS window ID".into())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        u64::try_from(value)
+            .ok()
+            .filter(|id| *id != 0)
+            .map(WindowId::from_linux_xid)
+            .ok_or_else(|| "invalid X11 window ID".into())
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
     {
         Ok(WindowId::from_windows_handle(value))
     }

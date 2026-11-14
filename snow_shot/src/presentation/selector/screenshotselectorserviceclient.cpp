@@ -2,6 +2,17 @@
 #include "screenshotselectordisplaygeometry.h"
 #include "screenshotselectorpolicy.h"
 
+#if defined(Q_OS_LINUX)
+#include "linuxselectorpolicy.h"
+#include "snow_shot/platform/linux/x11windowquery.h"
+#include "snow_visual_region_detector.h"
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QImage>
+#include <QMutexLocker>
+#include <memory>
+#endif
+
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
 #include "../capture/screenshotcaptureperfinstrumentation.h"
 #include "snow_ui_selector.h"
@@ -276,6 +287,215 @@ void ScreenshotSelectorServiceClient::resultCallback(const SnowUiSelectorEvent* 
                  result.stopReason == ScreenshotSelectorStopReason::AccessibilityPending);
             if (client->m_callbacks.resultReady)
                 client->m_callbacks.resultReady(result);
+        },
+        Qt::QueuedConnection);
+}
+
+#elif defined(Q_OS_LINUX)
+// X11 window stack hit-testing plus visual element detection over the captured
+// display image. Results always arrive through the queued callback path.
+struct ScreenshotSelectorServiceClient::CallbackBridge {};
+
+namespace {
+
+QVector<QRect> detectWindowElements(const CapturedDisplayModel& display, const QRect& windowRect) {
+    if (display.image.isNull() || display.physicalRect.isEmpty() || windowRect.isEmpty())
+        return {};
+    const QRect imageCrop = snow_shot::presentation::selector::imageRectForPhysicalRect(
+        display.physicalRect, display.image.size(), windowRect);
+    if (imageCrop.isEmpty())
+        return {};
+    QImage crop = display.image.copy(imageCrop).convertToFormat(QImage::Format_BGR888);
+    if (crop.isNull())
+        return {};
+    SnowDetectedRegions* raw = nullptr;
+    if (snow_detect_visual_regions(crop.constBits(), static_cast<size_t>(crop.sizeInBytes()),
+                                   static_cast<uint32_t>(crop.width()),
+                                   static_cast<uint32_t>(crop.height()),
+                                   static_cast<size_t>(crop.bytesPerLine()), &raw) != 0) {
+        return {};
+    }
+    const std::unique_ptr<SnowDetectedRegions, decltype(&snow_detected_regions_release)> result(
+        raw, snow_detected_regions_release);
+    size_t count = 0;
+    const SnowDetectedRegion* data = snow_detected_regions_data(result.get(), &count);
+    QVector<QRect> rects;
+    rects.reserve(static_cast<qsizetype>(count));
+    for (size_t index = 0; index < count; ++index) {
+        const auto& region = data[index];
+        if (region.width <= 0 || region.height <= 0)
+            continue;
+        const QRect imageRect(imageCrop.x() + region.x, imageCrop.y() + region.y, region.width,
+                              region.height);
+        const QRect physical = snow_shot::presentation::selector::physicalRectForImageRect(
+            display.physicalRect, display.image.size(), imageRect);
+        if (!physical.isEmpty())
+            rects.push_back(physical);
+    }
+    return rects;
+}
+
+} // namespace
+
+ScreenshotSelectorServiceClient::ScreenshotSelectorServiceClient(
+    ScreenshotSelectorServiceClientCallbacks callbacks, QObject* parent)
+    : QObject(parent), m_bridge(std::make_unique<CallbackBridge>()),
+      m_callbacks(std::move(callbacks)) {
+    m_pool.setMaxThreadCount(1);
+}
+
+ScreenshotSelectorServiceClient::~ScreenshotSelectorServiceClient() {
+    destroyService();
+    m_pool.waitForDone();
+}
+
+bool ScreenshotSelectorServiceClient::hasService() const {
+    return true;
+}
+
+bool ScreenshotSelectorServiceClient::ensureService() {
+    return true;
+}
+
+bool ScreenshotSelectorServiceClient::releaseCache() {
+    {
+        QMutexLocker lock(&m_detectionMutex);
+        m_detectionCache.clear();
+    }
+    m_displays.clear();
+    m_excluded.clear();
+    return true;
+}
+
+void ScreenshotSelectorServiceClient::destroyService() {
+    static_cast<void>(releaseCache());
+    m_pool.clear();
+}
+
+bool ScreenshotSelectorServiceClient::startRefresh(quint64 requestId,
+                                                   const QVector<std::uintptr_t>& excludedHwnds) {
+    m_excluded = excludedHwnds;
+    m_displays.clear();
+    {
+        QMutexLocker lock(&m_detectionMutex);
+        m_detectionCache.clear();
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, requestId] {
+            if (m_callbacks.refreshFinished)
+                m_callbacks.refreshFinished(requestId, true);
+        },
+        Qt::QueuedConnection);
+    return true;
+}
+
+bool ScreenshotSelectorServiceClient::startRefreshWithDisplays(
+    quint64 requestId, const QVector<std::uintptr_t>& excludedHwnds,
+    const QVector<CapturedDisplayModel>& displays) {
+    if (displays.isEmpty())
+        return false;
+    m_excluded = excludedHwnds;
+    m_displays = displays;
+    {
+        QMutexLocker lock(&m_detectionMutex);
+        m_detectionCache.clear();
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this, requestId] {
+            if (m_callbacks.refreshFinished)
+                m_callbacks.refreshFinished(requestId, true);
+        },
+        Qt::QueuedConnection);
+    return true;
+}
+
+bool ScreenshotSelectorServiceClient::startHitTest(quint64 epoch, quint64 requestId,
+                                                   quint64 generation, const QPoint& physicalPoint,
+                                                   ScreenshotSelectorHitTestMode mode,
+                                                   quint32 displayId) {
+    const QVector<CapturedDisplayModel> displays = m_displays;
+    const QVector<std::uintptr_t> excluded = m_excluded;
+    m_pool.start(
+        [this, epoch, requestId, generation, physicalPoint, mode, displayId, displays, excluded] {
+            handleLinuxHitTest(epoch, requestId, generation, physicalPoint, mode, displayId,
+                               displays, excluded);
+        });
+    return true;
+}
+
+bool ScreenshotSelectorServiceClient::startRefinement(const ScreenshotSelectorResult&) {
+    return false;
+}
+
+void ScreenshotSelectorServiceClient::invalidateRefinement() {}
+
+void ScreenshotSelectorServiceClient::handleLinuxHitTest(
+    quint64 epoch, quint64 requestId, quint64 generation, const QPoint& physicalPoint,
+    ScreenshotSelectorHitTestMode mode, quint32 displayId,
+    const QVector<CapturedDisplayModel>& displays, const QVector<std::uintptr_t>& excluded) {
+    QElapsedTimer timer;
+    timer.start();
+    ScreenshotSelectorResult result;
+    result.epoch = epoch;
+    result.requestId = requestId;
+    result.generation = generation;
+    result.point = physicalPoint;
+    result.mode = mode;
+    result.displayId = displayId;
+    result.phase = ScreenshotSelectorResultPhase::Initial;
+    result.stopReason = ScreenshotSelectorStopReason::Complete;
+    result.canRefine = false;
+
+    qsizetype displayIndex = -1;
+    for (qsizetype index = 0; index < displays.size(); ++index) {
+        if (displays.at(index).physicalRect.contains(physicalPoint)) {
+            displayIndex = index;
+            break;
+        }
+    }
+    const int screenCount = snow_shot::platform::x11::x11ScreenCount();
+    int screenIndex = -1;
+    QPoint rootOffset;
+    if (screenCount > 1 && displayIndex >= 0) {
+        screenIndex = static_cast<int>(displayIndex);
+        rootOffset = displays.at(displayIndex).physicalRect.topLeft();
+    }
+    const auto target = snow_shot::presentation::selector::pickWindowAtPoint(
+        physicalPoint, snow_shot::platform::x11::stackedTopLevelWindows(), excluded,
+        static_cast<quint32>(QCoreApplication::applicationPid()), screenIndex, rootOffset);
+    result.ok = true;
+    if (target) {
+        QRect selection = target->frameRect;
+        if (mode == ScreenshotSelectorHitTestMode::WindowSubElement && displayIndex >= 0) {
+            const CapturedDisplayModel& display = displays.at(displayIndex);
+            bool cached = false;
+            QVector<QRect> elements;
+            {
+                QMutexLocker lock(&m_detectionMutex);
+                cached = m_detectionCache.contains(target->windowId);
+                if (cached)
+                    elements = m_detectionCache.value(target->windowId);
+            }
+            if (!cached) {
+                elements = detectWindowElements(display, target->frameRect);
+                QMutexLocker lock(&m_detectionMutex);
+                m_detectionCache.insert(target->windowId, elements);
+            }
+            if (const auto element = snow_shot::presentation::selector::pickElementAtPoint(
+                    elements, physicalPoint, target->frameRect)) {
+                selection = *element;
+            }
+        }
+        result.rects = {selection};
+    }
+    result.elapsedUs = static_cast<quint64>(timer.nsecsElapsed() / 1000);
+    QMetaObject::invokeMethod(
+        this,
+        [this, result] {
+            if (m_callbacks.resultReady)
+                m_callbacks.resultReady(result);
         },
         Qt::QueuedConnection);
 }

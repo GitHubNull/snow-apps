@@ -23,10 +23,16 @@ namespace storage = snow_shot::storage;
 namespace presentation = snow_shot::presentation;
 
 namespace {
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
 constexpr int WINDOW_TOPMOST_ACTION_COUNT = 1;
 #else
 constexpr int WINDOW_TOPMOST_ACTION_COUNT = 0;
+#endif
+// Linux hides the native file-pinning quick action from the tray manifest.
+#ifdef Q_OS_LINUX
+constexpr int PIN_SELECTED_FILES_ACTION_OFFSET = 1;
+#else
+constexpr int PIN_SELECTED_FILES_ACTION_OFFSET = 0;
 #endif
 void require(bool condition, const char* message) {
     if (!condition) {
@@ -685,8 +691,8 @@ void builtInCatalogIsCompleteAndValid() {
         sectionCount == 53,
         "Windows includes the context menu shortcut category with capture and recording groups");
 #else
-    require(sectionCount == 52,
-            "catalog includes capture and recording groups with merged storage and desktop groups");
+    require(sectionCount == 51,
+            "Linux omits the Windows-only advanced capture compatibility section");
 #endif
     // Verify platform membership directly; shared features have their own binding and metadata
     // assertions, so adding one must not require maintaining an unrelated catalog-wide total.
@@ -713,21 +719,24 @@ void builtInCatalogIsCompleteAndValid() {
     const auto& excludedPlatformItems = windowsOnlyItems;
 #elif defined(Q_OS_LINUX)
     // Linux shares the non-macOS catalog shape, except the Explorer-integration
-    // settings that are compiled for Windows only.
-    const QSet<QString> linuxOnlyItems{
-        QStringLiteral("system.launch-as-administrator"),
-        QStringLiteral("system.restart-as-administrator"),
+    // and Windows capture API settings that are compiled for Windows only.
+    const QSet<QString> windowsCaptureOnlyItems{
         QStringLiteral("screenshot.api-mode"),
         QStringLiteral("screen-recording.api-mode"),
         QStringLiteral("screenshot.window-element-api"),
         QStringLiteral("screenshot.restore-original-screen-colors"),
+    };
+    const QSet<QString> linuxOnlyItems{
+        QStringLiteral("system.launch-as-administrator"),
+        QStringLiteral("system.restart-as-administrator"),
     };
     const QSet<QString> windowsExplorerOnlyItems{
         QStringLiteral("system.context-menu-mode"),
         QStringLiteral("system.annotation-mode-when-opening-for-editing"),
         QStringLiteral("windows-context-menu-shortcut.edit_with_snow_shot"),
     };
-    const QSet<QString> excludedLinuxItems = macOnlyItems | windowsExplorerOnlyItems;
+    const QSet<QString> excludedLinuxItems =
+        macOnlyItems | windowsExplorerOnlyItems | windowsCaptureOnlyItems;
     const auto& expectedPlatformItems = linuxOnlyItems;
     const auto& excludedPlatformItems = excludedLinuxItems;
 #else
@@ -818,22 +827,20 @@ void builtInCatalogIsCompleteAndValid() {
     const auto* apiMode =
         catalog.item({QStringLiteral("screenshots"), QStringLiteral("capture-compatibility"),
                       QStringLiteral("screenshot.api-mode")});
-#ifdef Q_OS_MACOS
-    require(apiMode == nullptr, "macOS must omit Windows-only capture backends");
-#else
+#ifdef Q_OS_WIN
     require(apiMode != nullptr &&
                 apiMode->title.translated() == QStringLiteral("Screenshot capture API") &&
                 apiMode->configurationKey == QStringLiteral("screenshot/api_mode") &&
                 std::get<settings::SettingsSelectDefinition>(apiMode->payload).binding ==
                     settings::SettingsSelectBinding::ScreenshotApiMode,
             "capture API and color restoration must share the system screenshot section");
+#else
+    require(apiMode == nullptr, "macOS and Linux must omit Windows-only capture backends");
 #endif
     const auto* windowElementApi =
         catalog.item({QStringLiteral("screenshots"), QStringLiteral("capture-compatibility"),
                       QStringLiteral("screenshot.window-element-api")});
-#ifdef Q_OS_MACOS
-    require(windowElementApi == nullptr, "macOS must omit the Windows-only element API setting");
-#else
+#ifdef Q_OS_WIN
     const auto* windowElementSelect =
         windowElementApi != nullptr
             ? std::get_if<settings::SettingsSelectDefinition>(&windowElementApi->payload)
@@ -851,19 +858,22 @@ void builtInCatalogIsCompleteAndValid() {
                 storage::ConfigurationSchema::defaultValue(windowElementApi->configurationKey) ==
                     QStringLiteral("uia"),
             "system Screenshot settings must expose MSAA and UIA with UIA as the default");
+#else
+    require(windowElementApi == nullptr,
+            "macOS and Linux must omit the Windows-only element API setting");
 #endif
     const auto* colorRestoration =
         catalog.item({QStringLiteral("screenshots"), QStringLiteral("capture-compatibility"),
                       QStringLiteral("screenshot.restore-original-screen-colors")});
-#ifdef Q_OS_MACOS
-    require(colorRestoration == nullptr, "macOS must omit Windows color restoration");
-#else
+#ifdef Q_OS_WIN
     require(colorRestoration != nullptr &&
                 colorRestoration->configurationKey ==
                     QStringLiteral("screenshot/restore_original_screen_colors") &&
                 std::get<settings::SettingsSwitchDefinition>(colorRestoration->payload).binding ==
                     settings::SettingsSwitchBinding::ScreenshotRestoreOriginalScreenColors,
             "screen color restoration must be a system screenshot switch");
+#else
+    require(colorRestoration == nullptr, "macOS and Linux must omit Windows color restoration");
 #endif
     const auto* captureCursor =
         catalog.item({QStringLiteral("screenshots"), QStringLiteral("screenshot-capture"),
@@ -910,29 +920,23 @@ void builtInCatalogIsCompleteAndValid() {
     const auto* recordingApiMode = catalog.item({QStringLiteral("screen-recording"),
                                                  QStringLiteral("screen-recording-capture"),
                                                  QStringLiteral("screen-recording.api-mode")});
-#ifdef Q_OS_MACOS
-    require(recordingApiMode == nullptr, "macOS must omit Windows-only recording APIs");
-#else
+#ifdef Q_OS_WIN
     require(recordingApiMode != nullptr &&
                 recordingApiMode->configurationKey == QStringLiteral("screen_recording/api_mode") &&
                 recordingApiMode->title.translated() == QStringLiteral("Recording capture API"),
             "system Screen recording must expose its own API mode");
     const auto& recordingApiSelect =
         std::get<settings::SettingsSelectDefinition>(recordingApiMode->payload);
-    const QString expectedRecordingApiDefault =
-#ifdef Q_OS_WIN
-        QStringLiteral("wgc");
-#else
-        QStringLiteral("dxgi");
-#endif
     require(recordingApiSelect.binding == settings::SettingsSelectBinding::ScreenRecordingApiMode &&
                 recordingApiSelect.options.size() == 3 &&
                 recordingApiSelect.options[0].value == QStringLiteral("dxgi") &&
                 recordingApiSelect.options[1].value == QStringLiteral("wgc") &&
                 recordingApiSelect.options[2].value == QStringLiteral("gdi") &&
                 storage::ConfigurationSchema::defaultValue(recordingApiMode->configurationKey) ==
-                    expectedRecordingApiDefault,
+                    QStringLiteral("wgc"),
             "recording API mode must offer exactly DXGI, WGC, GDI and default to WGC");
+#else
+    require(recordingApiMode == nullptr, "macOS and Linux must omit Windows-only recording APIs");
 #endif
     require(
         recordingToolbarCapture != nullptr && recordingCaptureSection != nullptr &&
@@ -1065,7 +1069,7 @@ void builtInCatalogIsCompleteAndValid() {
         QStringLiteral("drawing-settings"),
         QStringLiteral("drawing"),
         QStringLiteral("screenshot-capture"),
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_WIN
         QStringLiteral("capture-compatibility"),
 #endif
     };
@@ -2595,7 +2599,8 @@ void globalHotkeyShortcutsHaveStableContracts() {
     }
 
     require(actions.size() == expectations.size() &&
-                expectations.size() == 27 + WINDOW_TOPMOST_ACTION_COUNT,
+                expectations.size() ==
+                    27 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET,
             "the global-hotkeys catalog must expose all shortcut actions exactly once");
     const auto* stitch = catalog.itemForShortcut(Action::StitchSelectedImages);
     const auto* stitchSchema = storage::ConfigurationSchema::entry(
@@ -2683,52 +2688,65 @@ void globalHotkeyShortcutsHaveStableContracts() {
     }
     const auto* trayMenuSchema =
         storage::ConfigurationSchema::entry(QStringLiteral("tray/menu_options"));
-    require(trayGroups.size() == 5 && trayGroups.at(0).id == QStringLiteral("screenshot") &&
-                trayGroups.at(0).options.size() == 11 &&
-                trayGroups.at(1).id == QStringLiteral("pin-to-screen") &&
-                trayGroups.at(1).options.size() == 5 &&
-                trayGroups.at(2).id == QStringLiteral("screen-recording") &&
-                trayGroups.at(2).options.size() == 3 &&
-                trayGroups.at(3).id == QStringLiteral("other") &&
-                trayGroups.at(3).options.size() == 7 + WINDOW_TOPMOST_ACTION_COUNT &&
-                trayGroups.at(4).id == QStringLiteral("system") &&
-                trayGroups.at(4).options.size() == 4 &&
-                trayOptionIds.size() == 30 + WINDOW_TOPMOST_ACTION_COUNT &&
-                trayOptionIds.at(7) == QStringLiteral("quick.screenshot-save") &&
-                trayOptionIds.at(8) == QStringLiteral("quick.screenshot-quick-save") &&
-                trayOptionIds.at(11) == QStringLiteral("quick.pin-clipboard-content") &&
-                trayOptionIds.at(12) == QStringLiteral("quick.pin-selected-files") &&
-                trayOptionIds.at(13) == QStringLiteral("quick.restore-last-closed-windows") &&
-                trayOptionIds.at(14) == QStringLiteral("quick.hide-show-all-windows") &&
-                trayOptionIds.at(15) == QStringLiteral("quick.open-pin-to-screen-management") &&
-                trayOptionIds.at(16) == QStringLiteral("quick.screen-record") &&
-                trayOptionIds.at(17) == QStringLiteral("quick.screen-record-copy") &&
-                trayOptionIds.at(18) == QStringLiteral("quick.open-screen-recording-folder") &&
-                trayOptionIds.at(19) == QStringLiteral("quick.open-capture-history") &&
-                trayOptionIds.at(20) == QStringLiteral("quick.global-canvas") &&
-                trayOptionIds.at(21) == QStringLiteral("quick.stitch-selected-images") &&
-                trayOptionIds.at(22) == QStringLiteral("quick.split-selected-images") &&
-                trayOptionIds.at(23) == QStringLiteral("quick.translate-selected-text") &&
-                trayOptionIds.at(24 + WINDOW_TOPMOST_ACTION_COUNT) ==
-                    QStringLiteral("quick.toggle-global-hotkeys") &&
-                trayOptionIds.at(25 + WINDOW_TOPMOST_ACTION_COUNT) ==
-                    QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window") &&
-                trayOptionIds.at(26 + WINDOW_TOPMOST_ACTION_COUNT) ==
-                    QStringLiteral("tray.window-grouping") &&
-                trayGroups.at(4).options.at(0).kind ==
-                    settings::SettingsTrayMenuOptionKind::WindowGrouping &&
-                trayOptionIds.at(27 + WINDOW_TOPMOST_ACTION_COUNT) ==
-                    QStringLiteral("tray.show-main-window") &&
-                trayOptionIds.at(28 + WINDOW_TOPMOST_ACTION_COUNT) ==
-                    QStringLiteral("tray.restart-app") &&
-                trayGroups.at(4).options.at(2).kind ==
-                    settings::SettingsTrayMenuOptionKind::RestartApp &&
-                trayGroups.at(4).options.at(2).iconFactory &&
-                trayGroups.at(4).options.at(2).iconFactory() ==
-                    snow_shot::presentation::icons::custom::outlined::Restart() &&
-                trayOptionIds.at(29 + WINDOW_TOPMOST_ACTION_COUNT) == QStringLiteral("tray.exit") &&
-                trayMenuSchema != nullptr && trayMenuSchema->allowedStringValues == trayOptionIds,
-            "tray menu options must derive all global-hotkey groups and append system commands");
+    require(
+        trayGroups.size() == 5 && trayGroups.at(0).id == QStringLiteral("screenshot") &&
+            trayGroups.at(0).options.size() == 11 &&
+            trayGroups.at(1).id == QStringLiteral("pin-to-screen") &&
+            trayGroups.at(1).options.size() == 5 - PIN_SELECTED_FILES_ACTION_OFFSET &&
+            trayGroups.at(2).id == QStringLiteral("screen-recording") &&
+            trayGroups.at(2).options.size() == 3 &&
+            trayGroups.at(3).id == QStringLiteral("other") &&
+            trayGroups.at(3).options.size() == 7 + WINDOW_TOPMOST_ACTION_COUNT &&
+            trayGroups.at(4).id == QStringLiteral("system") &&
+            trayGroups.at(4).options.size() == 4 &&
+            trayOptionIds.size() ==
+                30 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET &&
+            trayOptionIds.at(7) == QStringLiteral("quick.screenshot-save") &&
+            trayOptionIds.at(8) == QStringLiteral("quick.screenshot-quick-save") &&
+            trayOptionIds.at(11) == QStringLiteral("quick.pin-clipboard-content") &&
+            trayOptionIds.at(13 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.restore-last-closed-windows") &&
+            trayOptionIds.at(14 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.hide-show-all-windows") &&
+            trayOptionIds.at(15 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.open-pin-to-screen-management") &&
+            trayOptionIds.at(16 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.screen-record") &&
+            trayOptionIds.at(17 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.screen-record-copy") &&
+            trayOptionIds.at(18 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.open-screen-recording-folder") &&
+            trayOptionIds.at(19 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.open-capture-history") &&
+            trayOptionIds.at(20 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.global-canvas") &&
+            trayOptionIds.at(21 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.stitch-selected-images") &&
+            trayOptionIds.at(22 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.split-selected-images") &&
+            trayOptionIds.at(23 - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.translate-selected-text") &&
+            trayOptionIds.at(24 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.toggle-global-hotkeys") &&
+            trayOptionIds.at(25 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window") &&
+            trayOptionIds.at(26 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("tray.window-grouping") &&
+            trayGroups.at(4).options.at(0).kind ==
+                settings::SettingsTrayMenuOptionKind::WindowGrouping &&
+            trayOptionIds.at(27 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("tray.show-main-window") &&
+            trayOptionIds.at(28 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("tray.restart-app") &&
+            trayGroups.at(4).options.at(2).kind ==
+                settings::SettingsTrayMenuOptionKind::RestartApp &&
+            trayGroups.at(4).options.at(2).iconFactory &&
+            trayGroups.at(4).options.at(2).iconFactory() ==
+                snow_shot::presentation::icons::custom::outlined::Restart() &&
+            trayOptionIds.at(29 + WINDOW_TOPMOST_ACTION_COUNT - PIN_SELECTED_FILES_ACTION_OFFSET) ==
+                QStringLiteral("tray.exit") &&
+            trayMenuSchema != nullptr && trayMenuSchema->allowedStringValues == trayOptionIds,
+        "tray menu options must derive all global-hotkey groups and append system commands");
 
     const QJsonArray allTrayOptions = QJsonArray::fromStringList(trayOptionIds);
     const auto normalizedAllTrayOptions = storage::ConfigurationSchema::normalize(
@@ -2899,12 +2917,12 @@ void globalHotkeyShortcutsHaveStableContracts() {
                     QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window"),
             "Other quick actions expose history, canvas, stitching, splitting, translation, and "
             "hotkey toggles");
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
     const auto* windowTopmost = catalog.itemForShortcut(Action::ToggleWindowUnderCursorAlwaysOnTop);
     require(windowTopmost && otherShortcuts->items.at(5).id == windowTopmost->id &&
                 windowTopmost->title.translated() ==
                     QStringLiteral("Toggle Always on Top for the Window Under the Cursor") &&
-                trayOptionIds.at(24) == windowTopmost->id &&
+                trayOptionIds.at(24 - PIN_SELECTED_FILES_ACTION_OFFSET) == windowTopmost->id &&
                 !trayMenuSchema->defaultValue.toArray().contains(windowTopmost->id),
             "window-under-cursor topmost follows translation and starts hidden in the tray");
     const settings::SettingsSearchIndex topmostSearch(settings::builtInSettingsRegistry());
@@ -2919,7 +2937,7 @@ void globalHotkeyShortcutsHaveStableContracts() {
                     QStringLiteral("global_shortcuts/toggle_window_under_cursor_always_on_top")) &&
                 !trayOptionIds.contains(
                     QStringLiteral("quick.toggle-window-under-cursor-always-on-top")),
-            "other platforms omit the window-under-cursor topmost setting and tray option");
+            "platforms without a topmost implementation omit the setting and tray option");
 #endif
     const auto* pinSection =
         catalog.section(QStringLiteral("global-hotkeys"), QStringLiteral("pin-to-screen"));
@@ -3011,12 +3029,6 @@ void compactTrayManifestMatchesRegistryCatalog() {
         defaultOptionIds.push_back(value.toString());
         defaultOptionSet.insert(value.toString());
     }
-#if defined(Q_OS_LINUX)
-    // The compact Linux manifest filters recording quick actions that the
-    // schema default still lists.
-    defaultOptionIds.removeAll(QStringLiteral("quick.screen-record"));
-    defaultOptionSet.remove(QStringLiteral("quick.screen-record"));
-#endif
     QStringList orderedManifestDefaults;
     for (const auto& group : compact.groups) {
         for (const auto& option : group.options) {
@@ -3028,23 +3040,7 @@ void compactTrayManifestMatchesRegistryCatalog() {
     require(defaultOptionIds == orderedManifestDefaults,
             "tray defaults must follow the canonical manifest order");
 
-#if defined(Q_OS_LINUX)
-    // The compact Linux manifest filters recording and file-pinning quick
-    // actions; project the catalog through the same set for comparison.
-    auto filteredProjectedGroups = projectedGroups;
-    for (auto& group : filteredProjectedGroups) {
-        group.options.removeIf([](const settings::SettingsTrayMenuOptionDefinition& option) {
-            return option.shortcutAction == presentation::GlobalShortcutAction::ScreenRecord ||
-                   option.shortcutAction == presentation::GlobalShortcutAction::ScreenRecordCopy ||
-                   option.shortcutAction ==
-                       presentation::GlobalShortcutAction::OpenScreenRecordingFolder ||
-                   option.shortcutAction == presentation::GlobalShortcutAction::PinSelectedFiles;
-        });
-    }
-    const auto& comparisonGroups = filteredProjectedGroups;
-#else
     const auto& comparisonGroups = projectedGroups;
-#endif
 
     require(compact.groups.size() == comparisonGroups.size(),
             "the compact tray manifest must preserve catalog group count");
@@ -3339,12 +3335,13 @@ void searchIndexIsGeneratedAndRanked() {
                         }),
             "select option labels must be indexed");
     const auto windowElementApi = index.search(QStringLiteral("UIA"));
-#ifdef Q_OS_MACOS
-    require(windowElementApi.isEmpty(), "macOS search must omit Windows-only backend choices");
-#else
+#ifdef Q_OS_WIN
     require(!windowElementApi.isEmpty() && windowElementApi.constFirst().location.itemId ==
                                                QStringLiteral("screenshot.window-element-api"),
             "window element API options must find the system Screenshot setting");
+#else
+    require(windowElementApi.isEmpty(),
+            "macOS and Linux search must omit Windows-only backend choices");
 #endif
     const auto ocrModel = index.search(QStringLiteral("Ultra Small V6 OCR model"));
     require(!ocrModel.isEmpty() && ocrModel.constFirst().location.itemId ==
@@ -4063,8 +4060,8 @@ void captureApiCatalog() {
     const auto* recording = catalog.item({QStringLiteral("screen-recording"),
                                           QStringLiteral("screen-recording-capture"),
                                           QStringLiteral("screen-recording.api-mode")});
-#ifdef Q_OS_MACOS
-    require(!screenshot && !recording, "macOS must omit Windows capture API settings");
+#ifndef Q_OS_WIN
+    require(!screenshot && !recording, "macOS and Linux must omit Windows capture API settings");
 #else
     require(screenshot && recording, "Windows capture API settings must be present");
     const auto& screenshotSelect =

@@ -397,8 +397,9 @@ and minimal QPA platforms used by tests do not trip the gate.
   its models under `assets/ocr`). Translation, table, and LaTeX run on the
   configured Snow Shot server; the default `linux-debug` preset points at
   `http://localhost:8080`, so set `api_configuration/server_url` (or use the
-  release presets) for production. Translate-selected-text stays disabled:
-  `snow-selected-text` has no Linux backend.
+  release presets) for production. Translate-selected-text reads the X11
+  PRIMARY selection on a worker thread (800 ms budget, UTF-8 with STRING
+  fallback, INCR support) and never injects input or rewrites the clipboard.
 - Scrolling capture runs through a Qt frame source (root-window grab cropped to
   the physical selection) plus XTest wheel dispatch, and excludes the selection
   from the overlay's X input shape. It has no per-window capture exclusion, so
@@ -430,20 +431,37 @@ and minimal QPA platforms used by tests do not trip the gate.
   `mate-panel` work-area strut on 2026-11-14: the overlay window reports the
   full screen size, the painted bottom border shows the vertical resize cursor,
   and dragging it changes only the height on both first and repeated captures.
-- Smart selection and window selection depend on native backends that are not
-  built on Linux. Live (continuously updating) pinned window capture is
-  unavailable: `liveWindowTargetAtPoint` returns `nullopt` and the pin-window
-  action reports that no capturable window was found.
-- Global mouse gestures fall back to the unsupported backend. Global keyboard
-  shortcuts work through `XGrabKey` on X11 sessions.
-- Chinese input methods do not engage in the text tool or settings inputs
-  (verified with fcitx5/rime on 2026-11-13): keys arrive as raw ASCII with no
-  preedit or candidate window. The bundled Qt 6.12 kit ships only the
-  ibus/compose input-context plugins, and the app's input contexts never take
-  input-method focus (`fcitx5-diagnose` reports `focus:0`); a minimal QLineEdit
-  app built with the same kit receives candidates, so the gap is
-  application-side. Type ASCII or paste text from an external editor until a
-  fcitx5-qt6 plugin and the focus handling are added.
+- Smart selection and window selection run on X11: the overlay queries
+  `_NET_CLIENT_LIST_STACKING` (falling back to `XQueryTree`), skips panels,
+  desktops, menus, tooltips, excluded overlay windows, and Snow Shot's own
+  process, and returns the manager frame rectangle. Window sub-element mode
+  runs the bundled visual region detector over the captured display image and
+  selects the smallest detected control under the pointer, falling back to the
+  window rectangle. Separate X screens (Zaphod) are handled on a best-effort
+  basis; the common single-screen Xinerama/XRandR layout uses physical desktop
+  coordinates directly.
+- Live (continuously updating) pinned window capture is available on X11:
+  window selection skips Snow Shot's own windows, the monitor polls the source
+  window at 200 ms, and a worker captures the manager frame through
+  `XCompositeNameWindowPixmap` plus `XGetImage` at up to 30 fps. The capture
+  frame (including the window manager title bar) matches the selection bounds.
+- Global mouse gestures run through XInput2 raw events on the root window and
+  reuse the shared gesture engine. X11 cannot suppress the activation chord, so
+  the activating modifiers and button also reach the target application.
+- Chinese input methods are prepared for the bundled Qt kit: the bootstrap
+  builds the fcitx5 Qt6 input-context plugin against Qt 6.12 (the distribution
+  plugin targets the distribution Qt and is rejected), and the install tree
+  whitelists it next to the ibus/compose plugins. Run
+  `sudo bash scripts/install-linux-system-deps.sh` once, then
+  `bash scripts/bootstrap-linux.sh`. Verify with fcitx5 (native plugin) and
+  with ibus before release.
+- "Toggle Always on Top for the window under the cursor" uses EWMH
+  `_NET_WM_STATE_ABOVE`; pinned-window group stacking orders the manager frames
+  with `XConfigureWindow` inside each topmost/normal band; the full-screen
+  canvas toggles click-through through an empty XShape input region. The
+  Windows-only capture API pickers (screenshot/recording backend, MSAA/UIA
+  element API, original-screen-color restoration) are hidden on Linux because
+  the Qt/X11 capture path has a single backend.
 - Wayland sessions are detected and the screenshot feature family is gated off
   with a user-visible explanation; the verified desktop path is X11 with
   OpenGL 3.3 or newer (XWayland follows the X11 path on a best-effort basis).

@@ -55,6 +55,9 @@ pub enum CaptureBackendKind {
     Gdi,
 
     ScreenCaptureKit,
+
+    /// Linux X11 capture through RandR monitors and MIT-SHM.
+    X11,
 }
 
 impl CaptureBackendKind {
@@ -65,6 +68,7 @@ impl CaptureBackendKind {
             Self::WindowsGraphicsCapture => "wgc",
             Self::Gdi => "gdi",
             Self::ScreenCaptureKit => "sck",
+            Self::X11 => "x11",
         }
     }
 }
@@ -100,7 +104,7 @@ impl Default for AutoBackendPolicy {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 pub const DEFAULT_AUTO_BACKEND_PRIORITY: [CaptureBackendKind; 3] = [
     CaptureBackendKind::WindowsGraphicsCapture,
     CaptureBackendKind::DxgiDuplication,
@@ -110,6 +114,9 @@ pub const DEFAULT_AUTO_BACKEND_PRIORITY: [CaptureBackendKind; 3] = [
 #[cfg(target_os = "macos")]
 pub const DEFAULT_AUTO_BACKEND_PRIORITY: [CaptureBackendKind; 1] =
     [CaptureBackendKind::ScreenCaptureKit];
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+pub const DEFAULT_AUTO_BACKEND_PRIORITY: [CaptureBackendKind; 1] = [CaptureBackendKind::X11];
 
 /// Source/destination rectangle pair used for partial monitor capture writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

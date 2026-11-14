@@ -95,6 +95,42 @@ if [[ "$skip_qt" == 0 ]]; then
     fi
 fi
 
+# The distribution's Qt6 fcitx5 plugin targets the distribution Qt and is
+# rejected by the bundled Qt kit, so build the input context plugin against the
+# bundled kit. Fcitx5Core/Config/Utils development files and ECM are required.
+fcitx5_qt_version="5.1.9"
+fcitx5_qt_root="$repo_root/.tools/fcitx5-qt"
+fcitx5_qt_plugin="$qt_dir/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"
+if [[ "$skip_qt" == 0 && ! -f "$fcitx5_qt_plugin" ]]; then
+    for fcitx5_pc in Fcitx5Core Fcitx5Config Fcitx5Utils; do
+        pkg-config --exists "$fcitx5_pc" ||
+            snow_die "Missing $fcitx5_pc development files. Run: sudo bash scripts/install-linux-system-deps.sh"
+    done
+    if [[ ! -d "$fcitx5_qt_root/src/.git" ]]; then
+        rm -rf "$fcitx5_qt_root/src"
+        mkdir -p "$fcitx5_qt_root"
+        git clone --depth 1 --branch "$fcitx5_qt_version" \
+            https://github.com/fcitx/fcitx5-qt.git "$fcitx5_qt_root/src"
+    fi
+    "$venv/bin/cmake" -S "$fcitx5_qt_root/src" -B "$fcitx5_qt_root/build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="$qt_dir" \
+        -DCMAKE_INSTALL_PREFIX="$qt_dir" \
+        -DENABLE_QT4=OFF -DENABLE_QT5=OFF -DENABLE_QT6=ON \
+        -DBUILD_TESTING=OFF
+    "$venv/bin/cmake" --build "$fcitx5_qt_root/build" -j "$(nproc)"
+    "$venv/bin/cmake" --install "$fcitx5_qt_root/build"
+    if [[ ! -f "$fcitx5_qt_plugin" ]]; then
+        # Qt installs may redirect plugin destinations; copy the built plugin.
+        fcitx5_built_plugin="$(find "$fcitx5_qt_root/build" "$qt_dir" \
+            -name libfcitx5platforminputcontextplugin.so -print -quit)"
+        [[ -n "$fcitx5_built_plugin" ]] ||
+            snow_die "fcitx5-qt built but its Qt6 input context plugin was not found."
+        mkdir -p "$(dirname "$fcitx5_qt_plugin")"
+        cp -f "$fcitx5_built_plugin" "$fcitx5_qt_plugin"
+    fi
+fi
+
 vcpkg_root="$repo_root/.tools/vcpkg"
 vcpkg_baseline=4497409a47f19db373a410a0efb84eca4747adbf
 vcpkg_installed="$vcpkg_root/installed/linux-dynamic"

@@ -501,24 +501,14 @@ class GlobalShortcutManager::Impl {
     }
 
     bool actionAvailable(GlobalShortcutAction action) const {
-#ifndef Q_OS_WIN
-        if (action == GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop)
-            return false;
-#endif
 #if defined(Q_OS_LINUX)
         // Recording and native file pinning have no Linux backends; offering
         // bindings for them would only guarantee registration failures.
         // TranslateSelectedText additionally has no selected-text backend
         // (snow-selected-text ships Windows/macOS implementations only).
-        switch (action) {
-        case GlobalShortcutAction::ScreenRecord:
-        case GlobalShortcutAction::ScreenRecordCopy:
-        case GlobalShortcutAction::OpenScreenRecordingFolder:
-        case GlobalShortcutAction::PinSelectedFiles:
+        // Native file pinning has no cross-desktop Linux API.
+        if (action == GlobalShortcutAction::PinSelectedFiles)
             return false;
-        default:
-            break;
-        }
 #endif
         if (action != GlobalShortcutAction::TranslateSelectedText) {
             return true;

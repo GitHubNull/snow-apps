@@ -8,11 +8,9 @@
 namespace snow_shot::app {
 [[nodiscard]] inline bool editionActionToolAvailable(const QString& id) {
     if (id == QStringLiteral("pin-window-to-screen")) {
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        // Live window presentation is available on X11 now; Wayland sessions
+        // never reach the capture overlay, so the toolbar entry stays inert.
         return true;
-#else
-        return false;
-#endif
     }
     if (id == QStringLiteral("airdrop")) {
 #ifdef Q_OS_MACOS

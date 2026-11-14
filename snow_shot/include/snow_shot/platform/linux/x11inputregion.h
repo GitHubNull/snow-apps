@@ -19,6 +19,11 @@ namespace snow_shot::platform::x11 {
 // Returns false when the window or display is unavailable.
 [[nodiscard]] bool setWindowInputRegion(QWidget* widget, const QRegion& region);
 
+// Enables or removes the window's input region entirely. A disabled window is
+// click-through while its painted content (ShapeBounding) stays untouched.
+// Returns false when the window or display is unavailable.
+[[nodiscard]] bool setWindowInputEnabled(QWidget* widget, bool enabled);
+
 } // namespace snow_shot::platform::x11
 
 #endif // SNOW_SHOT_PLATFORM_LINUX_X11INPUTREGION_H
