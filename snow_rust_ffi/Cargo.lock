@@ -1513,6 +1513,7 @@ dependencies = [
  "snow-recording-model",
  "snow-webcam",
  "windows",
+ "x11rb",
 ]
 
 [[package]]

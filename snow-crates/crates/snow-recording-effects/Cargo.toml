@@ -28,3 +28,6 @@ bench-synthetic-input = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
 snow-macos = { path = "../snow-macos" }
+
+[target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
+x11rb = { version = "0.13.1", features = ["xinput"] }

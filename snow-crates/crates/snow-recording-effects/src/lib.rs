@@ -11,6 +11,8 @@ pub mod recorded;
 pub mod state;
 pub mod surface;
 pub mod webcam;
+#[cfg(not(any(windows, target_os = "macos")))]
+pub(crate) mod x11_observe;
 pub use keyboard_overlay::{KeyboardOverlayConfig, KeyboardOverlayFont};
 pub use recorded::RecordedEffects;
 pub use snow_recording_model::{

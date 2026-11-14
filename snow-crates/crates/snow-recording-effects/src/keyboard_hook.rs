@@ -669,14 +669,157 @@ mod platform {
 #[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use super::*;
-    pub struct Observer;
-    impl Observer {
-        pub fn start(_: Sender<KeyObservation>, _: Arc<AtomicU64>) -> Result<Self, String> {
-            Err("keyboard recording is supported only on Windows".into())
+    use std::thread::JoinHandle;
+    use std::time::Duration;
+    use x11rb::connection::Connection as _;
+    use x11rb::protocol::Event as XEvent;
+    use x11rb::protocol::xinput::XIEventMask;
+
+    pub struct Observer {
+        stop: Sender<()>,
+        worker: Option<JoinHandle<()>>,
+    }
+
+    fn observe_key(
+        keymap: &crate::x11_observe::Keymap,
+        detail: u32,
+        down: bool,
+        pressed: &mut [u8; 256],
+        alt_gr: &mut bool,
+        sender: &Sender<KeyObservation>,
+        generation: &Arc<AtomicU64>,
+    ) {
+        let Ok(keycode) = u8::try_from(detail) else {
+            return;
+        };
+        let keysym = keymap.keysym(keycode, 0).unwrap_or(0);
+        let level3 = keymap.is_alt_gr_key(keycode);
+        let key = if level3 {
+            0xa5
+        } else {
+            crate::x11_observe::vk_from_keysym(keysym).unwrap_or(0x100 + u16::from(keycode))
+        };
+        if usize::from(key) < pressed.len() {
+            if down && pressed[usize::from(key)] != 0 {
+                return;
+            }
+            pressed[usize::from(key)] = if down { 0x80 } else { 0 };
+        }
+        if key == 0xa5 {
+            *alt_gr = down && level3;
+        }
+        let event = KeyObservation {
+            at: Instant::now(),
+            key,
+            down,
+            // The X keysym rides along so printable_label can resolve
+            // layout-correct characters without another server roundtrip.
+            scan: keysym,
+            layout: 0,
+            pressed: *pressed,
+            alt_gr: *alt_gr,
+            generation: generation.load(Ordering::Acquire),
+            #[cfg(test)]
+            extra_info: 0,
+        };
+        if sender.try_send(event).is_err() {
+            generation.fetch_add(1, Ordering::AcqRel);
         }
     }
-    pub fn printable_label(_: u16, _: &KeyObservation) -> Option<String> {
-        None
+
+    impl Observer {
+        pub fn start(
+            sender: Sender<KeyObservation>,
+            generation: Arc<AtomicU64>,
+        ) -> Result<Self, String> {
+            let mask = XIEventMask::RAW_KEY_PRESS | XIEventMask::RAW_KEY_RELEASE;
+            let session = crate::x11_observe::connect(mask)?;
+            let keymap = crate::x11_observe::Keymap::load(&session.connection)?;
+            let mut pressed = [0u8; 256];
+            for keycode in crate::x11_observe::pressed_keycodes(&session.connection)? {
+                if let Some(vk) = keymap.keycode_vk(keycode) {
+                    pressed[usize::from(vk)] = 0x80;
+                }
+            }
+            let (stop, stopped) = crossbeam_channel::bounded(1);
+            let worker = std::thread::Builder::new()
+                .name("snow-keyboard-adapter".into())
+                .spawn(move || {
+                    snow_core::qos::apply_current_thread();
+                    let mut keymap = keymap;
+                    let mut pressed = pressed;
+                    let mut seen_generation = generation.load(Ordering::Acquire);
+                    let mut alt_gr = false;
+                    loop {
+                        crossbeam_channel::select_biased! {
+                            recv(stopped) -> _ => break,
+                            default(Duration::from_millis(20)) => {}
+                        }
+                        let current = generation.load(Ordering::Acquire);
+                        if current != seen_generation {
+                            seen_generation = current;
+                            pressed = [0; 256];
+                            alt_gr = false;
+                            if let Ok(down) =
+                                crate::x11_observe::pressed_keycodes(&session.connection)
+                            {
+                                for keycode in down {
+                                    if let Some(vk) = keymap.keycode_vk(keycode) {
+                                        pressed[usize::from(vk)] = 0x80;
+                                    }
+                                }
+                            }
+                        }
+                        while let Ok(Some(event)) = session.connection.poll_for_event() {
+                            match event {
+                                XEvent::XinputRawKeyPress(raw) => observe_key(
+                                    &keymap,
+                                    raw.detail,
+                                    true,
+                                    &mut pressed,
+                                    &mut alt_gr,
+                                    &sender,
+                                    &generation,
+                                ),
+                                XEvent::XinputRawKeyRelease(raw) => observe_key(
+                                    &keymap,
+                                    raw.detail,
+                                    false,
+                                    &mut pressed,
+                                    &mut alt_gr,
+                                    &sender,
+                                    &generation,
+                                ),
+                                XEvent::MappingNotify(_) => {
+                                    let _ = keymap.reload(&session.connection);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+            Ok(Self {
+                stop,
+                worker: Some(worker),
+            })
+        }
+    }
+
+    impl Drop for Observer {
+        fn drop(&mut self) {
+            let _ = self.stop.try_send(());
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+
+    pub fn printable_label(_: u16, observation: &KeyObservation) -> Option<String> {
+        if observation.scan == 0 {
+            return None;
+        }
+        crate::x11_observe::label_from_keysym(observation.scan)
     }
 }
 

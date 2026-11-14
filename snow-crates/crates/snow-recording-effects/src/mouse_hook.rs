@@ -545,31 +545,252 @@ mod platform {
 
 #[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
-    use crossbeam_channel::Sender;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    };
+    use std::thread::JoinHandle;
+    use std::time::{Duration, Instant};
+
+    use crossbeam_channel::{Receiver, Sender};
+    use x11rb::connection::Connection as _;
+    use x11rb::protocol::Event as XEvent;
+    use x11rb::protocol::xinput::XIEventMask;
 
     use super::{MouseClickObservation, MouseMovement};
+    use crate::keyboard_hook::MODIFIER_KEYS;
+    use crate::x11_observe;
 
-    pub struct MouseHookObserver;
+    fn modifier_state(session: &x11_observe::RawInput, keymap: &x11_observe::Keymap) -> [bool; 8] {
+        let mut state = [false; 8];
+        if let Ok(down) = x11_observe::pressed_keycodes(&session.connection) {
+            for keycode in down {
+                if let Some(vk) = keymap.keycode_vk(keycode)
+                    && let Some(index) = MODIFIER_KEYS.iter().position(|&key| key == vk)
+                {
+                    state[index] = true;
+                }
+            }
+        }
+        state
+    }
+
+    pub struct MouseHookObserver {
+        stop: Sender<()>,
+        worker: Option<JoinHandle<()>>,
+        generation: Arc<AtomicU64>,
+    }
 
     impl MouseHookObserver {
         pub fn generation(&self) -> u64 {
-            0
+            self.generation.load(Ordering::Acquire)
         }
         pub fn start(
-            _region: (i32, i32, u32, u32),
-            _sender: Sender<MouseClickObservation>,
+            region: (i32, i32, u32, u32),
+            sender: Sender<MouseClickObservation>,
         ) -> Result<Self, String> {
-            Ok(Self)
+            Self::start_with_movement(region, sender, None)
         }
         pub fn start_with_movement(
-            _region: (i32, i32, u32, u32),
-            _sender: Sender<MouseClickObservation>,
-            _movement: Option<(
-                Sender<MouseMovement>,
-                crossbeam_channel::Receiver<MouseMovement>,
-            )>,
+            region: (i32, i32, u32, u32),
+            sender: Sender<MouseClickObservation>,
+            movement: Option<(Sender<MouseMovement>, Receiver<MouseMovement>)>,
         ) -> Result<Self, String> {
-            Err("native mouse observation requires Windows".into())
+            let mask = XIEventMask::RAW_BUTTON_PRESS
+                | XIEventMask::RAW_BUTTON_RELEASE
+                | XIEventMask::RAW_MOTION
+                | XIEventMask::RAW_KEY_PRESS
+                | XIEventMask::RAW_KEY_RELEASE
+                // Xephyr withholds raw motion unless non-raw motion is also
+                // selected on the same window.
+                | XIEventMask::MOTION;
+            let session = x11_observe::connect(mask)?;
+            let keymap = x11_observe::Keymap::load(&session.connection)?;
+            let (stop, stopped) = crossbeam_channel::bounded(1);
+            let generation = Arc::new(AtomicU64::new(0));
+            let shared = Arc::clone(&generation);
+            let worker = std::thread::Builder::new()
+                .name("snow-mouse-adapter".into())
+                .spawn(move || {
+                    snow_core::qos::apply_current_thread();
+                    let mut keymap = keymap;
+                    let mut held = [false; 5];
+                    let mut continuity = 0u64;
+                    let mut was_inside = false;
+                    let mut seen_generation = 0u64;
+                    let mut modifiers = modifier_state(&session, &keymap);
+                    loop {
+                        crossbeam_channel::select_biased! {
+                            recv(stopped) -> _ => break,
+                            default(Duration::from_millis(20)) => {}
+                        }
+                        let current = shared.load(Ordering::Acquire);
+                        if current != seen_generation {
+                            seen_generation = current;
+                            held = [false; 5];
+                            modifiers = modifier_state(&session, &keymap);
+                        }
+                        while let Ok(Some(event)) = session.connection.poll_for_event() {
+                            match event {
+                                XEvent::XinputRawKeyPress(raw) => {
+                                    if let Ok(keycode) = u8::try_from(raw.detail)
+                                        && let Some(vk) = keymap.keycode_vk(keycode)
+                                        && let Some(index) =
+                                            MODIFIER_KEYS.iter().position(|&key| key == vk)
+                                    {
+                                        modifiers[index] = true;
+                                    }
+                                }
+                                XEvent::XinputRawKeyRelease(raw) => {
+                                    if let Ok(keycode) = u8::try_from(raw.detail)
+                                        && let Some(vk) = keymap.keycode_vk(keycode)
+                                        && let Some(index) =
+                                            MODIFIER_KEYS.iter().position(|&key| key == vk)
+                                    {
+                                        modifiers[index] = false;
+                                    }
+                                }
+                                XEvent::XinputRawButtonPress(raw) => {
+                                    let Some(button) = x11_observe::button_from_detail(raw.detail)
+                                    else {
+                                        continue;
+                                    };
+                                    let Some((px, py)) = x11_observe::pointer_position(
+                                        &session.connection,
+                                        session.root,
+                                    ) else {
+                                        continue;
+                                    };
+                                    let x = px.saturating_sub(region.0);
+                                    let y = py.saturating_sub(region.1);
+                                    let inside = x >= 0
+                                        && y >= 0
+                                        && x < region.2 as i32
+                                        && y < region.3 as i32;
+                                    let scroll = button.scroll_direction().is_some();
+                                    if scroll {
+                                        if inside
+                                            && sender
+                                                .try_send(MouseClickObservation {
+                                                    at: Instant::now(),
+                                                    x,
+                                                    y,
+                                                    button,
+                                                    down: true,
+                                                    modifiers,
+                                                })
+                                                .is_err()
+                                        {
+                                            shared.fetch_add(1, Ordering::AcqRel);
+                                            held = [false; 5];
+                                        }
+                                    } else {
+                                        held[button as usize] = true;
+                                        if inside
+                                            && sender
+                                                .try_send(MouseClickObservation {
+                                                    at: Instant::now(),
+                                                    x,
+                                                    y,
+                                                    button,
+                                                    down: true,
+                                                    modifiers,
+                                                })
+                                                .is_err()
+                                        {
+                                            shared.fetch_add(1, Ordering::AcqRel);
+                                            held = [false; 5];
+                                        }
+                                    }
+                                }
+                                XEvent::XinputRawButtonRelease(raw) => {
+                                    let Some(button) = x11_observe::button_from_detail(raw.detail)
+                                    else {
+                                        continue;
+                                    };
+                                    // Classic X servers synthesize releases for
+                                    // wheel buttons; the model is press-only.
+                                    if button.scroll_direction().is_some() || !held[button as usize]
+                                    {
+                                        continue;
+                                    }
+                                    held[button as usize] = false;
+                                    let Some((px, py)) = x11_observe::pointer_position(
+                                        &session.connection,
+                                        session.root,
+                                    ) else {
+                                        continue;
+                                    };
+                                    if sender
+                                        .try_send(MouseClickObservation {
+                                            at: Instant::now(),
+                                            x: px.saturating_sub(region.0),
+                                            y: py.saturating_sub(region.1),
+                                            button,
+                                            down: false,
+                                            modifiers,
+                                        })
+                                        .is_err()
+                                    {
+                                        shared.fetch_add(1, Ordering::AcqRel);
+                                        held = [false; 5];
+                                    }
+                                }
+                                XEvent::XinputRawMotion(_) => {
+                                    let Some((sender, drain)) = &movement else {
+                                        continue;
+                                    };
+                                    let Some((px, py)) = x11_observe::pointer_position(
+                                        &session.connection,
+                                        session.root,
+                                    ) else {
+                                        continue;
+                                    };
+                                    let x = px.saturating_sub(region.0);
+                                    let y = py.saturating_sub(region.1);
+                                    let inside = x >= 0
+                                        && y >= 0
+                                        && x < region.2 as i32
+                                        && y < region.3 as i32;
+                                    if was_inside && !inside {
+                                        continuity = continuity.wrapping_add(1);
+                                    }
+                                    was_inside = inside;
+                                    let event = MouseMovement {
+                                        at: Instant::now(),
+                                        position: inside.then_some((x, y)),
+                                        continuity,
+                                    };
+                                    if let Err(crossbeam_channel::TrySendError::Full(event)) =
+                                        sender.try_send(event)
+                                    {
+                                        let _ = drain.try_recv();
+                                        let _ = sender.try_send(event);
+                                    }
+                                }
+                                XEvent::MappingNotify(_) => {
+                                    let _ = keymap.reload(&session.connection);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                })
+                .map_err(|error| error.to_string())?;
+            Ok(Self {
+                stop,
+                worker: Some(worker),
+                generation,
+            })
+        }
+    }
+
+    impl Drop for MouseHookObserver {
+        fn drop(&mut self) {
+            let _ = self.stop.try_send(());
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
         }
     }
 }

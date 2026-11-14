@@ -395,8 +395,13 @@ and minimal QPA platforms used by tests do not trip the gate.
 - Screen recording is available on X11: MP4/MKV/AVI output with software
   H.264/H.265 through the bundled FFmpeg, cursor capture through XFixes,
   toolbar exclusion, and PulseAudio system/microphone audio (see below).
-  Animated-image (GIF/WebP) recording, click/keyboard effects, webcam capture,
-  and recording on Wayland sessions are not implemented yet.
+  Click, scroll, and keyboard effects are recorded through XInput2 raw
+  button/key/motion events observed by `snow-recording-effects`: the root
+  selection negotiates XI 2.2 and co-selects non-raw motion because some
+  servers (notably Xephyr) otherwise withhold raw motion events, wheel
+  buttons report press-only observations, and AltGr maps to the right-menu
+  modifier slot. Animated-image (GIF/WebP) recording, webcam capture, and
+  recording on Wayland sessions are not implemented yet.
 - Recording audio uses `libpulse-simple`, so it works against PulseAudio and
   PipeWire's PulseAudio server. The system track records the default sink's
   monitor; the microphone device is the first non-monitor source (PipeWire may
