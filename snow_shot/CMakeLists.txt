@@ -2252,10 +2252,13 @@ qt_add_executable(snow_shot
     ${PROJECT_SOURCES}
 )
 if(UNIX AND NOT APPLE)
-    # The executable statically embeds Snow Image's bundled codecs. Hiding those
-    # archive symbols keeps GTK's gdk-pixbuf bound to the system libpng instead
-    # of this copy when a native file dialog loads PNG icons.
-    target_link_options(snow_shot PRIVATE "LINKER:--exclude-libs,ALL")
+    # The executable statically embeds Snow Image's bundled libpng. Keep its
+    # symbols out of the dynamic table so GTK's gdk-pixbuf binds to the system
+    # libpng when a native file dialog loads PNG icons. A version script is
+    # narrower than --exclude-libs,ALL, which would also hide x265's
+    # DSO-referenced API and break the recording encoder link.
+    target_link_options(snow_shot PRIVATE
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SnowShotLinuxHiddenSymbols.map")
 endif()
 snow_shot_link_macos_window_platform(snow_shot)
 if(WIN32 AND SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
