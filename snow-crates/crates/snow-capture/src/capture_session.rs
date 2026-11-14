@@ -1125,7 +1125,9 @@ impl CaptureSession {
         &mut self,
         reuse: Option<Frame>,
     ) -> CaptureResult<(Frame, Option<CursorAttachOutcome>)> {
-        if let Some(native) = &mut self.native {
+        if let Some(native) = &mut self.native
+            && native.embeds_cursor_in_capture()
+        {
             native.set_cursor_visible(true)?;
             return self.do_capture(reuse).map(|frame| (frame, None));
         }
@@ -2154,6 +2156,10 @@ mod tests {
             Ok(())
         }
 
+        fn embeds_cursor_in_capture(&self) -> bool {
+            true
+        }
+
         fn backend_kind(&self) -> crate::backend::CaptureBackendKind {
             crate::backend::CaptureBackendKind::Gdi
         }
@@ -2227,6 +2233,88 @@ mod tests {
             _monitor: &MonitorId,
         ) -> CaptureResult<Box<dyn MonitorCapturer>> {
             Ok(Box::new(LifecycleCapturer {
+                state: Arc::clone(&self.state),
+            }))
+        }
+    }
+
+    /// Models pixel-only native backends such as Linux X11: the OS cursor is
+    /// never part of the captured pixels, so sessions must project cursor
+    /// metadata instead of taking the native cursor-embedding fast path.
+    struct PixelOnlyBackend {
+        monitor: MonitorId,
+        state: Arc<Mutex<LifecycleState>>,
+    }
+
+    struct PixelOnlyCapturer {
+        state: Arc<Mutex<LifecycleState>>,
+    }
+
+    impl MonitorCapturer for PixelOnlyCapturer {
+        fn backend_kind(&self) -> crate::backend::CaptureBackendKind {
+            crate::backend::CaptureBackendKind::X11
+        }
+
+        fn capture(&mut self, reuse: Option<Frame>) -> CaptureResult<Frame> {
+            {
+                let mut state = self.state.lock().unwrap();
+                state.active = true;
+                state.capture_calls += 1;
+            }
+            let mut frame = reuse.unwrap_or_else(Frame::empty);
+            frame.ensure_rgba_capacity(4, 4)?;
+            frame.reset_metadata();
+            Ok(frame)
+        }
+
+        fn sample_cursor(&mut self) -> CaptureResult<Option<CursorSnapshot>> {
+            Ok(Some(CursorSnapshot {
+                absolute_x: 1,
+                absolute_y: 1,
+                visible: true,
+                shape: snow_cursor::CursorShapeCapture::Captured(
+                    snow_cursor::crosshair_cursor_shape(32, 32).expect("crosshair shape"),
+                ),
+            }))
+        }
+
+        fn release_capture_access(&mut self) {
+            self.state.lock().unwrap().active = false;
+        }
+
+        fn capture_access_active(&self) -> bool {
+            self.state.lock().unwrap().active
+        }
+    }
+
+    impl CaptureBackend for PixelOnlyBackend {
+        fn create_target_capturer(
+            &self,
+            _target: &CaptureTarget,
+            _options: CaptureOptions,
+        ) -> CaptureResult<Option<Box<dyn MonitorCapturer>>> {
+            Ok(Some(Box::new(PixelOnlyCapturer {
+                state: Arc::clone(&self.state),
+            })))
+        }
+
+        fn enumerate_monitors(&self) -> CaptureResult<Vec<MonitorId>> {
+            Ok(vec![self.monitor.clone()])
+        }
+
+        fn monitor_layout(&self) -> CaptureResult<MonitorLayout> {
+            Ok(mock_layout(&self.monitor, 0, 0, 4, 4))
+        }
+
+        fn primary_monitor(&self) -> CaptureResult<MonitorId> {
+            Ok(self.monitor.clone())
+        }
+
+        fn create_monitor_capturer(
+            &self,
+            _monitor: &MonitorId,
+        ) -> CaptureResult<Box<dyn MonitorCapturer>> {
+            Ok(Box::new(PixelOnlyCapturer {
                 state: Arc::clone(&self.state),
             }))
         }
@@ -2925,6 +3013,32 @@ mod tests {
             status.success(),
             "isolated pool lifecycle check failed: {test}"
         );
+    }
+
+    #[test]
+    fn pixel_only_native_capture_projects_cursor_metadata() {
+        let state = Arc::new(Mutex::new(LifecycleState::default()));
+        let backend: Arc<dyn CaptureBackend> = Arc::new(PixelOnlyBackend {
+            monitor: MonitorId::from_parts(41, 43, 0, "pixel-only-monitor", true),
+            state: Arc::clone(&state),
+        });
+        let mut session = CaptureSession::builder()
+            .target(CaptureTarget::PrimaryMonitor)
+            .with_backend(backend)
+            .build()
+            .unwrap();
+        let frame = session.capture().unwrap();
+        let cursor = frame
+            .metadata()
+            .cursor()
+            .expect("pixel-only native capture must attach projected cursor metadata");
+        assert!(cursor.visible);
+        assert_eq!((cursor.x, cursor.y), (1, 1));
+        assert!(
+            matches!(cursor.shape, snow_cursor::CursorShapeState::Embedded(_)),
+            "first projected sample must embed the shape"
+        );
+        assert!(state.lock().unwrap().capture_calls > 0);
     }
 
     #[test]

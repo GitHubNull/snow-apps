@@ -168,6 +168,13 @@ pub(crate) trait MonitorCapturer: Send {
     fn set_cursor_visible(&mut self, _visible: bool) -> CaptureResult<()> {
         Ok(())
     }
+    /// Whether captured pixels already embed the OS cursor. Native streaming
+    /// capturers that composite the cursor into frames (macOS ScreenCaptureKit)
+    /// return true; pixel-only backends (Linux X11) return false so callers
+    /// project cursor metadata onto frames themselves.
+    fn embeds_cursor_in_capture(&self) -> bool {
+        false
+    }
     fn set_screen_color_transform(
         &mut self,
         _transform: Option<crate::color_effect::ScreenColorTransform>,

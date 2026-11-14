@@ -264,6 +264,9 @@ impl MonitorCapturer for MacCapturer {
             })
             .map_err(map_error)
     }
+    fn embeds_cursor_in_capture(&self) -> bool {
+        true
+    }
     fn backend_kind(&self) -> CaptureBackendKind {
         CaptureBackendKind::ScreenCaptureKit
     }
