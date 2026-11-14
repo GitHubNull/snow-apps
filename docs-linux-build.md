@@ -417,6 +417,19 @@ and minimal QPA platforms used by tests do not trip the gate.
   2026-11-14: dragging the bottom-center handle changed the selection height
   (301 px to 401 px) with the top edge fixed, and the style row switched its
   input region when the tool changed.
+- The capture overlay is shown with `showFullScreen()` on xcb, and a retained
+  pooled window clears its cached `WindowFullScreen` state whenever the native
+  surface is restored so the recreated window requests fullscreen again. X11
+  window managers constrain frameless utility windows to `_NET_WORKAREA`
+  (Cinnamon/Muffin on the development desktop shrinks a 1920x1080 request to
+  1920x1040 for its panel), which would leave the overlay short of the captured
+  display: the canvas camera is centered on the display, so every rendered
+  canvas point sat about 20 px above its pointer position and the painted
+  selection border was hit-tested as selection interior (move cursor instead of
+  the resize cursor). Reproduced and fixed on Xephyr with a bottom
+  `mate-panel` work-area strut on 2026-11-14: the overlay window reports the
+  full screen size, the painted bottom border shows the vertical resize cursor,
+  and dragging it changes only the height on both first and repeated captures.
 - Smart selection and window selection depend on native backends that are not
   built on Linux. Live (continuously updating) pinned window capture is
   unavailable: `liveWindowTargetAtPoint` returns `nullopt` and the pin-window

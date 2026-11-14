@@ -865,6 +865,17 @@ void ScreenshotOverlayWindow::restoreNativeSurface() {
         m_canvas->setUpdatesEnabled(true);
     }
 
+#ifdef Q_OS_LINUX
+    // A retained overlay releases its native window between captures. The new
+    // native window does not inherit _NET_WM_STATE_FULLSCREEN, and
+    // showFullScreen() is a no-op while the widget still caches the fullscreen
+    // state, so clear it here and let the next presentation request fullscreen
+    // on the recreated window.
+    if (QGuiApplication::platformName() == QStringLiteral("xcb")) {
+        setWindowState(windowState() & ~Qt::WindowFullScreen);
+    }
+#endif
+
     initializeScreenshotSurface();
     static_cast<void>(winId());
     hide();

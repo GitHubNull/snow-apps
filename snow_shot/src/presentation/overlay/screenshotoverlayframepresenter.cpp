@@ -16,6 +16,21 @@
 namespace {
 [[maybe_unused]] constexpr auto kRevealStrategyEnvironment = "SNOW_SHOT_CAPTURE_REVEAL_STRATEGY";
 
+void showOverlayWindow(QWidget& window) {
+#if defined(Q_OS_LINUX)
+    // X11 window managers constrain frameless tool windows to the work area.
+    // The overlay must cover the whole captured display; otherwise the canvas
+    // camera, which is centered on the display, renders every canvas point
+    // above the matching pointer position and selection borders are hit-tested
+    // where they are not drawn.
+    if (QGuiApplication::platformName() == QStringLiteral("xcb")) {
+        window.showFullScreen();
+        return;
+    }
+#endif
+    window.show();
+}
+
 class ShowPaintSuppression final : public QObject {
   public:
     ShowPaintSuppression(QWidget& window, bool suppressNativeRedraw,
@@ -231,7 +246,7 @@ void ScreenshotOverlayFramePresenter::presentPreparedFrame(bool deferFirstPaint)
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.redraw_suppressed");
     if (!alreadyVisible) {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("presentation.window.show");
-        m_window.show();
+        showOverlayWindow(m_window);
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.show_returned");
     paintSuppression.restoreNativeRedraw();
@@ -284,7 +299,7 @@ void ScreenshotOverlayFramePresenter::presentFramePaced() {
     // frame while the queued first paint interleaves with drag input.
     {
         SNOW_SHOT_CAPTURE_PERF_SCOPE("presentation.window.show");
-        m_window.show();
+        showOverlayWindow(m_window);
     }
     SNOW_SHOT_CAPTURE_PERF_MILESTONE("presentation.window.frame_paced_shown");
 }
