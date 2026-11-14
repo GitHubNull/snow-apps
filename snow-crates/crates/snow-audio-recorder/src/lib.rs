@@ -39,5 +39,5 @@ pub use timeline::{
     audio_anchor_from_origin, audio_anchor_from_origin_instant, duration_to_frames_round,
 };
 
-#[cfg(any(windows, target_os = "macos", feature = "bench-internals"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux", feature = "bench-internals"))]
 mod convert;

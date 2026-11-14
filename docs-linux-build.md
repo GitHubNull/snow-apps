@@ -15,7 +15,11 @@ Wayland session detection, and multi-screen/mixed-DPI geometry tests.
 The native Rust capture backends (Windows Graphics Capture, ScreenCaptureKit)
 and the Cocoa/CoreGraphics platform layer remain unavailable on Linux. Snow Shot
 therefore uses `QScreen::grabWindow` for still screenshots and keeps the existing
-UI, editing, and export pipelines unchanged; screen recording stays disabled.
+UI, editing, and export pipelines unchanged. Screen recording runs through the
+Rust X11 capture backend (XComposite/XRender composition with own-window
+exclusions, MIT-SHM reads) and the bundled FFmpeg (libx264/libx265) encoder;
+system and microphone audio come from PulseAudio-compatible servers
+(PipeWire or PulseAudio) through `libpulse-simple`.
 
 Phase 2 builds:
 
@@ -247,8 +251,8 @@ The floating toolbar and the global shortcuts are the most reliable capture
 entries on Linux. When the desktop provides a StatusNotifier host, the tray
 icon registers and the tray menu is available; on desktops without a tray or
 StatusNotifier host, only the floating toolbar, the main window, and the
-global shortcuts remain. The tray menu hides the commands that cannot run on
-Linux (recording) instead of listing dead items.
+global shortcuts remain. The tray menu hides only the commands that cannot run
+on Linux instead of listing dead items.
 
 Verify the clipboard and the saved file independently:
 
@@ -291,10 +295,10 @@ see the known limitations.
   the GUI thread right before the grab and premultiplied into the frame) when
   the "Show cursor" screenshot setting is on; the color picker's
   `cursorPatch`/`cursorPixelRect` account for the extra cursor pixels.
-- Rust still builds the `snow-capture`, `snow-recording-c`, and draw-engine
-  static bundles because the C++ code links them for editing and export. The
-  capture provider never calls the Rust capture backend on Linux; the Rust
-  recording runtime is linked but unused.
+- Rust builds the `snow-capture`, `snow-recording-c`, and draw-engine static
+  bundles. Still screenshots use the Qt provider above; smart/window selection
+  detection and screen recording call the Rust capture backend (X11 SHM reads,
+  XComposite/XRender composition with own-window exclusions).
 - The Linux build links the vcpkg FFmpeg archives with the pkg-config static
   closure from `cmake/SnowShotLinux.cmake`. Cargo's native link metadata is not
   propagated to CMake for static archives, so the same closure is attached to
@@ -388,9 +392,18 @@ and minimal QPA platforms used by tests do not trip the gate.
 
 ## Known limitations
 
-- Screen recording and audio/video export are disabled on Linux
-  (`FeatureFamily::ScreenRecording` returns false); the native capture backends
-  only exist for Windows and macOS.
+- Screen recording is available on X11: MP4/MKV/AVI output with software
+  H.264/H.265 through the bundled FFmpeg, cursor capture through XFixes,
+  toolbar exclusion, and PulseAudio system/microphone audio (see below).
+  Animated-image (GIF/WebP) recording, click/keyboard effects, webcam capture,
+  and recording on Wayland sessions are not implemented yet.
+- Recording audio uses `libpulse-simple`, so it works against PulseAudio and
+  PipeWire's PulseAudio server. The system track records the default sink's
+  monitor; the microphone device is the first non-monitor source (PipeWire may
+  report a monitor as the default source). If the sink is suspended when the
+  recording starts, PipeWire can take a few seconds to resume it, so the first
+  seconds of the system track may be silent; the UI and the encoder timeline
+  stay correct.
 - Text recognition, text translation, QR code, table, and LaTeX recognition are
   available through the bundled OCR worker (`snow_ocr_process`, built from the
   `simd-paddle-ocr-rs` nightly submodule and staged next to the app binary with

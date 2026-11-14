@@ -40,3 +40,7 @@ windows = { workspace = true, features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 snow-macos = { path = "../snow-macos" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libpulse-binding = { workspace = true }
+libpulse-simple-binding = { workspace = true }
