@@ -731,6 +731,14 @@ void ScreenRecordingToolbarWindow::showWithoutActivating() {
     show();
     raise();
     setAttribute(Qt::WA_ShowWithoutActivating, wasNonActivating);
+#if defined(Q_OS_LINUX)
+    // Activating the owned area window can raise it above this transient toolbar
+    // after the synchronous raise; re-assert the toolbar once activation settles.
+    QTimer::singleShot(0, this, [this]() {
+        if (isVisible())
+            raise();
+    });
+#endif
 }
 
 void ScreenRecordingToolbarWindow::placeForRecordingRegion(const QRect& recordingRegion) {
