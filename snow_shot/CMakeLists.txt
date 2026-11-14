@@ -11006,6 +11006,16 @@ foreach(_ocr_process_host_target IN ITEMS snow_shot snow-shot-ocr-recognition-se
 endforeach()
 unset(_ocr_process_host_target)
 
+# The Windows release workflow validates and ships the portable tree through
+# `cmake --install --component SnowShot`. Mirror the staged assets/ocr payload
+# into that tree; the NSIS packager rebuilds the same directory for its
+# variants, so this rule only affects component installs.
+if(WIN32 AND TARGET snow_ocr_process AND EXISTS "${SNOW_SHOT_OCR_ASSET_MANIFEST}")
+    install(DIRECTORY "$<TARGET_FILE_DIR:snow_shot>/assets/ocr"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
+        COMPONENT SnowShot)
+endif()
+
 # Linux bundles the same schema-3 payload as macOS: the worker lands next to
 # the host executable and the small model with its manifest under assets/ocr.
 if(UNIX AND NOT APPLE AND TARGET snow_ocr_process
