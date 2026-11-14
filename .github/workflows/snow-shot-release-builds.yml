@@ -158,6 +158,32 @@ jobs:
           wait "$pid" || true
           rm -rf "$tmp"
 
+      - name: Package AppImage and DEB
+        run: |
+          bash scripts/package-snow-shot-linux.sh             --stage-dir "$PWD/stage"             --output-dir "$PWD/linux-packages"
+
+      - name: Verify Linux packages
+        run: |
+          deb="$(ls linux-packages/snow-shot_*_amd64.deb)"
+          appimage="$(ls linux-packages/snow-shot-*-linux-x64.AppImage)"
+          dpkg-deb -I "$deb" >/dev/null
+          root="$(mktemp -d)"
+          dpkg-deb -x "$deb" "$root"
+          test -x "$root/opt/snow-shot/bin/snow_shot"
+          missing="$(ldd "$root/opt/snow-shot/bin/snow_shot" | grep 'not found' || true)"
+          if [ -n "$missing" ]; then
+            printf 'Missing DEB runtime libraries:\n%s\n' "$missing" >&2
+            exit 1
+          fi
+          rm -rf "$root"
+          extract="$(mktemp -d)"
+          appimage_abs="$(readlink -f "$appimage")"
+          (cd "$extract" && "$appimage_abs" --appimage-extract >/dev/null)
+          test -x "$extract/squashfs-root/AppRun"
+          test -x "$extract/squashfs-root/bin/snow_shot"
+          test -f "$extract/squashfs-root/snow-shot.desktop"
+          rm -rf "$extract"
+
       - name: Package install tree
         run: |
           label="${RELEASE_TAG:-snapshot}"
@@ -174,6 +200,10 @@ jobs:
           path: |
             snow-shot-*.tar.gz
             snow-shot-*.tar.gz.sha256
+            linux-packages/snow-shot-*.AppImage
+            linux-packages/snow-shot-*.AppImage.sha256
+            linux-packages/snow-shot_*.deb
+            linux-packages/snow-shot_*.deb.sha256
           if-no-files-found: error
 
       # Save caches even when a later step fails so a re-run can reuse the

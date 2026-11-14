@@ -471,11 +471,22 @@ and minimal QPA platforms used by tests do not trip the gate.
   reports a residency failure and is excluded with `-LE performance`.
 - Wayland is unvalidated; the verified desktop path is X11 with OpenGL 3.3 or
   newer (XWayland follows the X11 path on a best-effort basis).
-- Snow Shot's Windows/macOS integrations (File Explorer selection, printing,
-  sharing/AirDrop, startup registration, updater, crashpad) fall back to their
-  non-Windows stubs.
+- Printing uses Qt PrintSupport with the bundled CUPS platform plugin
+  (`QPrintDialog` + `QPrinter`); the image is fitted and centered on one page.
+  Startup registration writes an XDG autostart entry
+  (`$XDG_CONFIG_HOME/autostart/snow-shot.desktop`) that launches the app with
+  `--autostart`. Updates are handled inside the app only for AppImage builds:
+  the release check reads GitHub/Gitee assets, verifies the `.sha256`, replaces
+  the running AppImage atomically, and the existing restart flow relaunches it.
+  DEB and plain install trees report updates as package-manager managed.
+  Windows/macOS-only integrations that have no Linux equivalent (File Explorer
+  selection, AirDrop sharing, MSIX/Store) stay hidden and are documented as
+  not applicable.
 - Snow Shot writes structured JSON session logs on Linux under
   `~/.local/share/SnowShot/snow_shot/logs/<date>/`. Crashpad crash reporting and
   automatic upload remain Windows-only; diagnostics also go to stderr.
-- Packaging beyond the plain `cmake --install` tree (DEB/RPM/AppImage,
-  installer scripts), static Qt, and ARM64 are out of scope.
+- `scripts/package-snow-shot-linux.sh` builds the release AppImage (AppRun,
+  desktop entry, icon, bundled Qt/OCR/FFmpeg) and a DEB (`/opt/snow-shot` plus
+  `/usr/bin/snow-shot`); the release workflow runs both, verifies the DEB
+  runtime dependencies and the AppImage layout, and attaches them to the draft
+  release. RPM, static Qt, and ARM64 remain out of scope.

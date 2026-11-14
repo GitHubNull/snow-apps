@@ -4776,6 +4776,10 @@
             <translation>Vision Support</translation>
         </message>
         <message>
+            <source>Visual</source>
+            <translation>Visual</translation>
+        </message>
+        <message>
             <source>WGC</source>
             <translation>WGC</translation>
         </message>

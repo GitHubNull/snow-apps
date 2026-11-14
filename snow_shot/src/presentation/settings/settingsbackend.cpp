@@ -12,6 +12,9 @@
 #include "snow_shot/presentation/settings/applicationpriority.h"
 #include "snow_shot/platform/applicationqos.h"
 #include "snow_shot/platform/windows/autostartregistration.h"
+#ifdef Q_OS_LINUX
+#include "snow_shot/platform/linux/autostartregistration.h"
+#endif
 #ifdef Q_OS_MACOS
 #include "snow_shot/platform/macos/loginitemservice.h"
 #include <QGuiApplication>
@@ -40,6 +43,8 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QMimeData>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QPalette>
 #include <QTimer>
 #include <QUrl>
@@ -231,6 +236,29 @@ applyNativeStartupSettings(bool enabled, bool elevated,
     const auto result = loginItems->setEnabled(enabled);
     platform::windows::AdministratorResult converted;
     converted.success = result.success;
+    converted.error = result.error;
+    return converted;
+#elif defined(Q_OS_LINUX)
+    Q_UNUSED(loginItems);
+    Q_UNUSED(elevated);
+    using namespace platform::windows;
+    auto& configuration = storage::ApplicationStorage::instance().configuration();
+    const bool oldEnabled = storage::SystemSettings().autoStartAtBoot();
+    const auto linuxResult = platform::linux::setAutostartEnabled(enabled);
+    platform::linux::AutostartResult result;
+    result.success = linuxResult.success;
+    result.error = linuxResult.error;
+    const bool saved =
+        configuration.setValues({{QStringLiteral("system/auto_start_at_boot"), enabled},
+                                 {QStringLiteral("system/launch_as_administrator"), false}}) &&
+        configuration.flushNow().success;
+    if ((!result.success || !saved) && oldEnabled != enabled) {
+        static_cast<void>(
+            configuration.setValue(QStringLiteral("system/auto_start_at_boot"), oldEnabled));
+        static_cast<void>(configuration.flushNow());
+    }
+    AdministratorResult converted;
+    converted.success = result.success && saved;
     converted.error = result.error;
     return converted;
 #else

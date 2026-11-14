@@ -352,12 +352,48 @@
             <translation>伺服器返回了無效的下載範圍</translation>
         </message>
         <message>
+            <source>The update cache is unavailable.</source>
+            <translation>更新快取不可用。</translation>
+        </message>
+        <message>
+            <source>The update check failed.</source>
+            <translation>更新檢查失敗。</translation>
+        </message>
+        <message>
             <source>The update coordinator identity could not be verified</source>
             <translation>無法驗證更新協調處理程序的身分</translation>
         </message>
         <message>
+            <source>The update could not be installed. Check that the AppImage directory is writable.</source>
+            <translation>無法安裝更新。請確認 AppImage 所在目錄可寫入。</translation>
+        </message>
+        <message>
+            <source>The update could not be read.</source>
+            <translation>無法讀取更新檔。</translation>
+        </message>
+        <message>
+            <source>The update could not be saved.</source>
+            <translation>無法儲存更新檔。</translation>
+        </message>
+        <message>
+            <source>The update could not replace the running AppImage.</source>
+            <translation>無法取代正在執行的 AppImage。</translation>
+        </message>
+        <message>
+            <source>The update download failed.</source>
+            <translation>更新下載失敗。</translation>
+        </message>
+        <message>
+            <source>The update download timed out.</source>
+            <translation>更新下載逾時。</translation>
+        </message>
+        <message>
             <source>The update download was interrupted</source>
             <translation>更新下載已中斷</translation>
+        </message>
+        <message>
+            <source>The update endpoint is invalid.</source>
+            <translation>更新位址無效。</translation>
         </message>
         <message>
             <source>The update handoff was not acknowledged</source>
@@ -374,6 +410,10 @@
         <message>
             <source>The update package could not be downloaded</source>
             <translation>無法下載更新軟體套件</translation>
+        </message>
+        <message>
+            <source>The update request timed out.</source>
+            <translation>更新請求逾時。</translation>
         </message>
         <message>
             <source>The update server must use HTTPS</source>
@@ -394,6 +434,14 @@
         <message>
             <source>The update service sent an oversized protocol message</source>
             <translation>更新服務傳送了超過大小限制的通訊協定訊息</translation>
+        </message>
+        <message>
+            <source>The update signature could not be verified.</source>
+            <translation>無法驗證更新簽章。</translation>
+        </message>
+        <message>
+            <source>The update signature does not match.</source>
+            <translation>更新簽章不相符。</translation>
         </message>
         <message>
             <source>The update target does not match its application process</source>

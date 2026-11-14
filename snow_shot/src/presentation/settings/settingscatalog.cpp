@@ -2481,7 +2481,7 @@ SettingsItemDefinition autoStartItem() {
                           SettingsSwitchBinding::AutoStartAtBoot);
     return switchItem(
         QStringLiteral("system.auto-start-at-boot"),
-#ifdef Q_OS_MACOS
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
         QT_TRANSLATE_NOOP("SettingsCatalog", "Launch at login"),
         QT_TRANSLATE_NOOP("SettingsCatalog", "Start Snow Shot in the background when you log in."),
 #else

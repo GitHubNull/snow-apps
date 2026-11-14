@@ -1076,6 +1076,8 @@ if(UNIX AND NOT APPLE)
         src/platform/linux/x11inputregion.cpp
         include/snow_shot/platform/linux/windowalwaysontop.h
         src/platform/linux/windowalwaysontop.cpp
+        include/snow_shot/platform/linux/autostartregistration.h
+        src/platform/linux/autostartregistration.cpp
         src/platform/linux/x11primaryselection.cpp)
     target_include_directories(snow_shot_linux_x11
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -1987,6 +1989,12 @@ elseif(APPLE)
     target_sources(snow_shot_print PRIVATE src/platform/macos/nativeprint.mm)
     target_compile_options(snow_shot_print PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
     target_link_libraries(snow_shot_print PRIVATE "-framework AppKit")
+elseif(UNIX AND NOT APPLE)
+    snow_find_qt(COMPONENTS PrintSupport)
+    target_sources(snow_shot_print PRIVATE
+        src/platform/linux/nativeprint.h
+        src/platform/linux/nativeprint.cpp)
+    target_link_libraries(snow_shot_print PRIVATE Qt6::PrintSupport)
 else()
     target_sources(snow_shot_print PRIVATE src/presentation/services/nativeprintunsupported.cpp)
 endif()
@@ -3845,6 +3853,24 @@ if(SNOW_SHOT_BUILD_TESTS)
             COMMAND snow-shot-linux-selector-tests)
         set_tests_properties(snow-shot-linux-selector-tests PROPERTIES LABELS "unit"
             TIMEOUT 30)
+
+        add_executable(snow-shot-linux-print-tests tests/linux_print_tests.cpp)
+        target_link_libraries(snow-shot-linux-print-tests PRIVATE snow_shot_print
+            Qt6::PrintSupport)
+        add_test(NAME snow-shot-linux-print-tests COMMAND snow-shot-linux-print-tests)
+        set_tests_properties(snow-shot-linux-print-tests PROPERTIES LABELS "unit" TIMEOUT 30
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        add_executable(snow-shot-linux-autostart-tests tests/linux_autostart_tests.cpp)
+        target_link_libraries(snow-shot-linux-autostart-tests PRIVATE snow_shot_linux_x11)
+        add_test(NAME snow-shot-linux-autostart-tests COMMAND snow-shot-linux-autostart-tests)
+        set_tests_properties(snow-shot-linux-autostart-tests PROPERTIES LABELS "unit" TIMEOUT 30)
+
+        add_executable(snow-shot-linux-update-tests tests/linux_update_tests.cpp)
+        target_link_libraries(snow-shot-linux-update-tests PRIVATE snow_shot_updates
+            Qt6::Network)
+        add_test(NAME snow-shot-linux-update-tests COMMAND snow-shot-linux-update-tests)
+        set_tests_properties(snow-shot-linux-update-tests PROPERTIES LABELS "unit" TIMEOUT 60)
     endif()
 
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -11603,6 +11629,7 @@ elseif(UNIX AND NOT APPLE AND NOT SNOW_SHOT_QT_STATIC)
             platforminputcontexts/libcomposeplatforminputcontextplugin.so
             platforminputcontexts/libibusplatforminputcontextplugin.so
             platforminputcontexts/libfcitx5platforminputcontextplugin.so
+            printsupport/libcupsprintersupport.so
             tls/libqcertonlybackend.so
             tls/libqopensslbackend.so
             networkinformation/libqconnman.so

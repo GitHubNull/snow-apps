@@ -1,4 +1,4 @@
-if(NOT APPLE AND NOT SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
+if(WIN32 AND NOT SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
     # The GPL updater is a standalone Rust package inside the Snow Shot license boundary. The main
     # application links only the Qt process/protocol adapter below.
     set(_snow_shot_updater_manifest_dir
@@ -32,6 +32,8 @@ endif()
 
 if(APPLE)
     set(_snow_update_source src/update/macosupdateservice.cpp)
+elseif(UNIX)
+    set(_snow_update_source src/update/linuxupdateservice.cpp)
 else()
     set(_snow_update_source src/update/updateservice.cpp)
 endif()
@@ -46,19 +48,19 @@ add_library(snow_shot_updates STATIC
 target_include_directories(snow_shot_updates PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(snow_shot_updates PUBLIC Qt6::Core)
 target_link_libraries(snow_shot_updates PRIVATE snow_shot_distribution)
-if(APPLE)
+if(APPLE OR (UNIX AND NOT APPLE))
     target_link_libraries(snow_shot_updates PRIVATE Qt6::Network)
     target_compile_definitions(snow_shot_updates PRIVATE SNOW_SHOT_VERSION="${SNOW_SHOT_VERSION}")
 endif()
 target_link_libraries(snow_shot_settings PUBLIC snow_shot_updates)
 
 target_link_libraries(snow_shot PRIVATE snow_shot_updates)
-if(APPLE)
+if(APPLE OR (UNIX AND NOT APPLE))
     # An incremental build may still contain the helper copied by an older configuration.
     add_custom_command(TARGET snow_shot POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E rm -f "$<TARGET_FILE_DIR:snow_shot>/snow-shot-updater")
 endif()
-if(NOT APPLE AND NOT SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
+if(WIN32 AND NOT SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store")
     add_dependencies(snow_shot snow-shot-updater)
     add_custom_command(TARGET snow_shot POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different

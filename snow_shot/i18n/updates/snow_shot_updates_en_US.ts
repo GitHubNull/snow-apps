@@ -352,12 +352,48 @@
             <translation>The server returned an invalid download range</translation>
         </message>
         <message>
+            <source>The update cache is unavailable.</source>
+            <translation>The update cache is unavailable.</translation>
+        </message>
+        <message>
+            <source>The update check failed.</source>
+            <translation>The update check failed.</translation>
+        </message>
+        <message>
             <source>The update coordinator identity could not be verified</source>
             <translation>The update coordinator identity could not be verified</translation>
         </message>
         <message>
+            <source>The update could not be installed. Check that the AppImage directory is writable.</source>
+            <translation>The update could not be installed. Check that the AppImage directory is writable.</translation>
+        </message>
+        <message>
+            <source>The update could not be read.</source>
+            <translation>The update could not be read.</translation>
+        </message>
+        <message>
+            <source>The update could not be saved.</source>
+            <translation>The update could not be saved.</translation>
+        </message>
+        <message>
+            <source>The update could not replace the running AppImage.</source>
+            <translation>The update could not replace the running AppImage.</translation>
+        </message>
+        <message>
+            <source>The update download failed.</source>
+            <translation>The update download failed.</translation>
+        </message>
+        <message>
+            <source>The update download timed out.</source>
+            <translation>The update download timed out.</translation>
+        </message>
+        <message>
             <source>The update download was interrupted</source>
             <translation>The update download was interrupted</translation>
+        </message>
+        <message>
+            <source>The update endpoint is invalid.</source>
+            <translation>The update endpoint is invalid.</translation>
         </message>
         <message>
             <source>The update handoff was not acknowledged</source>
@@ -374,6 +410,10 @@
         <message>
             <source>The update package could not be downloaded</source>
             <translation>The update package could not be downloaded</translation>
+        </message>
+        <message>
+            <source>The update request timed out.</source>
+            <translation>The update request timed out.</translation>
         </message>
         <message>
             <source>The update server must use HTTPS</source>
@@ -394,6 +434,14 @@
         <message>
             <source>The update service sent an oversized protocol message</source>
             <translation>The update service sent an oversized protocol message</translation>
+        </message>
+        <message>
+            <source>The update signature could not be verified.</source>
+            <translation>The update signature could not be verified.</translation>
+        </message>
+        <message>
+            <source>The update signature does not match.</source>
+            <translation>The update signature does not match.</translation>
         </message>
         <message>
             <source>The update target does not match its application process</source>

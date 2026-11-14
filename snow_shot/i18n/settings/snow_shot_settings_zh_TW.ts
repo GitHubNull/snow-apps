@@ -4776,6 +4776,10 @@
             <translation>視覺支援</translation>
         </message>
         <message>
+            <source>Visual</source>
+            <translation>視覺</translation>
+        </message>
+        <message>
             <source>WGC</source>
             <translation>WGC</translation>
         </message>
